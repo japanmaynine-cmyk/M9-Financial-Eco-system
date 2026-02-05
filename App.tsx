@@ -7,20 +7,19 @@ import {
   ChevronRight,
   LogOut,
   User,
-  Bell,
-  Trash2,
   Lock,
   Mail,
   ArrowRight,
   Loader2,
   CloudUpload,
-  Cloud
+  Cloud,
+  AlertCircle
 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Dress } from './types';
 import SelectionManager from './views/SelectionManager';
 import Dashboard from './views/Dashboard';
-import { Button, Input, Card } from './components';
+import { Button, Card } from './components';
 import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
@@ -37,7 +36,6 @@ const App: React.FC = () => {
   const [dresses, setDresses] = useState<Dress[]>([]);
 
   useEffect(() => {
-    // Initial session check
     const checkSession = async () => {
       const { data: { session: initialSession } } = await supabase.auth.getSession();
       setSession(initialSession);
@@ -45,13 +43,9 @@ const App: React.FC = () => {
     };
     checkSession();
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
-      console.log(`Auth Event: ${event}`);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       setSession(currentSession);
-      
       if (!currentSession) {
-        // Absolute cleanup on sign-out
         setDresses([]);
         setSelectedDressId(null);
         setActiveView('dashboard');
@@ -72,51 +66,25 @@ const App: React.FC = () => {
     if (!session) return;
     
     setIsSyncing(true);
-    const { data, error } = await supabase
-      .from('dresses')
-      .select('*')
-      .order('id', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching dresses:', error);
-    } else if (data && data.length > 0) {
-      const fetchedDresses: Dress[] = data.map(row => ({
-        ...row.content,
-        id: row.id
-      }));
-      setDresses(fetchedDresses);
-    } else {
-      // Create a default dress if none exist for the new user
-      const defaultDress: Partial<Dress> = {
-        code: 'FL-TOP-01',
-        name: 'FirstLove Summer Top',
-        category: 'Sleeveless Crop Top',
-        fabrication: '22-01',
-        isChecked: true,
-        config: {
-          sizes: ['FREE', 'M', 'XL'],
-          colors: ['White', 'Navy'],
-          fabrics: [
-            { id: 1, type: 'Shell', code: 'C-POP-01', color: 'White', price: 4500, colorMode: 'Matched' },
-            { id: 2, type: 'Accessories', code: 'BTN-01', color: 'Silver', price: 500, colorMode: 'Fixed' }
-          ]
-        },
-        orders: { 'FREE': { 'White': 100, 'Navy': 50 }, 'M': { 'White': 20 }, 'XL': { 'White': 10 } },
-        consumption: { 1: { 'FREE': 1.2, 'M': 1.4, 'XL': 1.6 } },
-        costs: { fixedSalary: 500000, profitTargetPct: 35, marketingPct: 8, wastagePct: 3, opsPct: 5, sewingCost: 4000, accessoriesCost: 500 },
-        salesPrices: { 'FREE': { retail: 28000, ws: 21000, flash: 19000 } }
-      };
-      
-      const { data: inserted, error: insertError } = await supabase
+    try {
+      const { data, error } = await supabase
         .from('dresses')
-        .insert([{ content: defaultDress, user_id: session.user.id }])
-        .select();
-      
-      if (inserted) {
-        setDresses([{ ...defaultDress, id: inserted[0].id } as Dress]);
+        .select('*')
+        .order('id', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching dresses:', error);
+      } else if (data) {
+        setDresses(data.map(row => ({
+          ...row.content,
+          id: row.id
+        })));
       }
+    } catch (err) {
+      console.error('Fetch error:', err);
+    } finally {
+      setIsSyncing(false);
     }
-    setIsSyncing(false);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -136,28 +104,18 @@ const App: React.FC = () => {
         setLoginForm({ email: '', password: '' });
       }
     } catch (err) {
-      setLoginError("An unexpected error occurred during sign in.");
+      setLoginError("An unexpected connection error occurred.");
     } finally {
       setIsAuthenticating(false);
     }
   };
 
   const handleLogout = async () => {
-    if (window.confirm("Confirm system logout?")) {
+    if (window.confirm("Confirm logout?")) {
       try {
-        // 1. Immediate local UI reset for responsiveness
-        setSession(null);
-        setDresses([]);
-        setSelectedDressId(null);
-        setActiveView('dashboard');
-        setLoginForm({ email: '', password: '' });
-        setLoginError('');
-
-        // 2. Perform the actual Supabase sign-out
         await supabase.auth.signOut();
-      } catch (error) {
-        console.error("Sign out error:", error);
-        // We still consider ourselves logged out locally
+        setSession(null);
+      } catch (e) {
         setSession(null);
       }
     }
@@ -167,7 +125,7 @@ const App: React.FC = () => {
     let updatedDress: Dress | undefined;
 
     setDresses(prevDresses => {
-      const next = prevDresses.map(d => {
+      return prevDresses.map(d => {
         if (d.id !== id) return d;
         let newD;
         if (typeof field === 'object' && field !== null) {
@@ -178,26 +136,30 @@ const App: React.FC = () => {
         updatedDress = newD;
         return newD;
       });
-      return next;
     });
 
     if (updatedDress) {
       setIsSaving(true);
-      const { error } = await supabase
-        .from('dresses')
-        .update({ content: updatedDress })
-        .eq('id', id);
-      
-      if (error) console.error('Sync error:', error);
-      setIsSaving(false);
+      try {
+        const { error } = await supabase
+          .from('dresses')
+          .update({ content: updatedDress })
+          .eq('id', id);
+        if (error) console.error('Supabase sync error:', error);
+      } catch (e) {
+        console.error('Supabase update error:', e);
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
   const handleAddDress = async () => {
-    if (!session) return;
+    if (!session || isSyncing) return;
     setIsSyncing(true);
+    
     const newDressBase: Partial<Dress> = {
-      code: `CODE-${Date.now().toString().slice(-4)}`,
+      code: `M9-${Date.now().toString().slice(-4)}`,
       name: 'New Product Line',
       category: 'Top',
       fabrication: 'TBD',
@@ -209,71 +171,86 @@ const App: React.FC = () => {
       salesPrices: {}
     };
 
-    const { data, error } = await supabase
-      .from('dresses')
-      .insert([{ content: newDressBase, user_id: session.user.id }])
-      .select();
+    try {
+      // Corrected Schema Interaction: Include user_id and content
+      const { data, error } = await supabase
+        .from('dresses')
+        .insert([{ 
+          content: newDressBase,
+          user_id: session.user.id 
+        }])
+        .select();
 
-    if (error) {
-      console.error('Error creating dress:', error);
-    } else if (data) {
-      const created: Dress = { ...newDressBase, id: data[0].id } as Dress;
-      setDresses(prev => [...prev, created]);
-      setSelectedDressId(created.id);
-      setActiveView('manager');
+      if (error) {
+        console.error('Error creating dress:', error);
+        alert(`Supabase Error: ${error.message}`);
+      } else if (data && data.length > 0) {
+        const created: Dress = { ...newDressBase, id: data[0].id } as Dress;
+        setDresses(prev => [...prev, created]);
+        setSelectedDressId(created.id);
+        setActiveView('manager');
+      }
+    } catch (err) {
+      console.error('Add product error:', err);
+    } finally {
+      setIsSyncing(false);
     }
-    setIsSyncing(false);
   };
 
   const deleteDress = async (id: number) => {
-    if (window.confirm("Delete production line? This cannot be undone.")) {
+    if (window.confirm("Permanently delete this production line?")) {
       setIsSyncing(true);
-      const { error } = await supabase
-        .from('dresses')
-        .delete()
-        .eq('id', id);
+      try {
+        const { error } = await supabase
+          .from('dresses')
+          .delete()
+          .eq('id', id);
 
-      if (error) {
-        console.error('Error deleting dress:', error);
-      } else {
-        setActiveView('dashboard');
-        setSelectedDressId(null);
-        setDresses(prev => prev.filter(d => d.id !== id));
+        if (!error) {
+          setDresses(prev => prev.filter(d => d.id !== id));
+          if (selectedDressId === id) {
+            setActiveView('dashboard');
+            setSelectedDressId(null);
+          }
+        }
+      } catch (err) {
+        console.error('Delete error:', err);
+      } finally {
+        setIsSyncing(false);
       }
-      setIsSyncing(false);
     }
   };
 
   const selectedDress = dresses.find(d => d.id === selectedDressId);
 
-  if (!isLoaded) return <div className="min-h-screen bg-[#0f172a] flex items-center justify-center text-white font-black italic animate-pulse">M9 ECOSYSTEM...</div>;
+  if (!isLoaded) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white font-black italic tracking-widest animate-pulse">BOOTING M9 ECOSYSTEM...</div>;
 
   if (!session) {
     return (
       <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-6 relative overflow-hidden font-inter">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-fuchsia-600/20 blur-[120px] rounded-full"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-cyan-600/20 blur-[120px] rounded-full"></div>
+        <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] bg-fuchsia-600/10 blur-[150px] rounded-full"></div>
+        <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] bg-cyan-600/10 blur-[150px] rounded-full"></div>
 
         <div className="w-full max-w-md animate-fadeIn z-10">
-          <div className="flex flex-col items-center mb-10">
-            <div className="w-20 h-20 bg-gradient-to-br from-fuchsia-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-2xl mb-6 transform hover:rotate-6 transition-transform">
-              <span className="text-white text-3xl font-black italic tracking-tighter">M9</span>
+          <div className="flex flex-col items-center mb-12">
+            <div className="w-24 h-24 bg-gradient-to-br from-fuchsia-500 to-cyan-500 rounded-3xl flex items-center justify-center shadow-[0_0_50px_rgba(192,38,211,0.3)] mb-8 transform hover:scale-110 hover:rotate-6 transition-all duration-500">
+              <span className="text-white text-4xl font-black italic tracking-tighter">M9</span>
             </div>
-            <h1 className="text-white text-2xl font-black uppercase tracking-[0.3em] text-center">Money Maker Planner</h1>
-            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-2">Financial Ecosystem v2.0</p>
+            <h1 className="text-white text-3xl font-black uppercase tracking-[0.4em] text-center mb-2">Money Maker</h1>
+            <p className="text-cyan-400 text-xs font-bold uppercase tracking-[0.2em]">Garment Financial Ledger Pro</p>
           </div>
 
-          <Card className="p-8 bg-white/5 backdrop-blur-xl border-white/10" accentColor="cyan">
-            <form onSubmit={handleLogin} className="space-y-6">
+          <Card className="p-10 bg-white/5 backdrop-blur-3xl border-white/10 shadow-2xl" accentColor="cyan">
+            <form onSubmit={handleLogin} className="space-y-8">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <Mail size={12} className="text-cyan-400" /> Email Address
+                  <Mail size={12} className="text-cyan-400" /> Admin Email
                 </label>
                 <input 
                   type="email"
                   required
-                  placeholder="name@m9production.com"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:ring-2 focus:ring-cyan-500 transition-all placeholder:text-slate-600"
+                  placeholder="admin@m9.com"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-white font-bold outline-none focus:ring-2 focus:ring-cyan-500 transition-all placeholder:text-slate-700"
                   value={loginForm.email}
                   onChange={e => setLoginForm({...loginForm, email: e.target.value})}
                 />
@@ -281,20 +258,21 @@ const App: React.FC = () => {
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <Lock size={12} className="text-fuchsia-400" /> Password
+                  <Lock size={12} className="text-fuchsia-400" /> Access Key
                 </label>
                 <input 
                   type="password"
                   required
                   placeholder="••••••••"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:ring-2 focus:ring-fuchsia-500 transition-all placeholder:text-slate-600"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-white font-bold outline-none focus:ring-2 focus:ring-fuchsia-500 transition-all placeholder:text-slate-700"
                   value={loginForm.password}
                   onChange={e => setLoginForm({...loginForm, password: e.target.value})}
                 />
               </div>
 
               {loginError && (
-                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] font-black uppercase tracking-widest text-center animate-fadeIn">
+                <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] font-black uppercase tracking-widest text-center flex items-center justify-center gap-2 animate-fadeIn">
+                  <AlertCircle size={14} />
                   {loginError}
                 </div>
               )}
@@ -302,23 +280,25 @@ const App: React.FC = () => {
               <button 
                 type="submit"
                 disabled={isAuthenticating}
-                className="w-full bg-gradient-to-r from-fuchsia-600 to-cyan-600 text-white font-black uppercase tracking-[0.2em] py-4 rounded-xl shadow-xl hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
+                className="w-full bg-gradient-to-r from-fuchsia-600 to-cyan-600 text-white font-black uppercase tracking-[0.3em] py-5 rounded-2xl shadow-[0_10px_30px_rgba(8,145,178,0.3)] hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-3 group disabled:opacity-50"
               >
                 {isAuthenticating ? (
-                  <Loader2 size={18} className="animate-spin" />
+                  <Loader2 size={20} className="animate-spin" />
                 ) : (
                   <>
-                    Sign In
-                    <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                    Initialize Dashboard
+                    <ArrowRight size={20} className="group-hover:translate-x-2 transition-transform" />
                   </>
                 )}
               </button>
             </form>
           </Card>
           
-          <p className="text-center mt-8 text-slate-500 text-[10px] font-bold uppercase tracking-widest">
-            Authorized Personnel Only • M9 Production Group
-          </p>
+          <div className="flex items-center justify-center gap-6 mt-12 opacity-30 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-700 cursor-default">
+            <span className="text-[10px] font-black text-white uppercase tracking-widest">Enterprise v2.5</span>
+            <div className="w-1 h-1 bg-white rounded-full"></div>
+            <span className="text-[10px] font-black text-white uppercase tracking-widest">Secured Cloud</span>
+          </div>
         </div>
       </div>
     );
@@ -326,25 +306,25 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-inter">
-      <aside className="w-full md:w-72 bg-[#0f172a] text-white flex-shrink-0 flex flex-col z-40 border-r border-white/5">
+      <aside className="w-full md:w-72 bg-[#0f172a] text-white flex-shrink-0 flex flex-col z-40 border-r border-white/5 shadow-2xl">
         <div className="p-8">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="w-10 h-10 bg-gradient-to-br from-fuchsia-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg transform -rotate-3">
-              <span className="text-white text-xl font-black italic tracking-tighter">M9</span>
+          <div className="flex items-center gap-4 mb-12">
+            <div className="w-12 h-12 bg-gradient-to-br from-fuchsia-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-3 hover:rotate-0 transition-transform duration-300">
+              <span className="text-white text-2xl font-black italic tracking-tighter">M9</span>
             </div>
             <div>
               <h2 className="text-sm font-black uppercase tracking-widest leading-none">ECOSYSTEM</h2>
-              <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest mt-1">Production Lead</p>
+              <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-[0.2em] mt-2">Production</p>
             </div>
           </div>
 
-          <nav className="space-y-1.5">
+          <nav className="space-y-2">
             <button 
               onClick={() => setActiveView('dashboard')}
-              className={`w-full flex items-center gap-4 px-5 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeView === 'dashboard' ? 'bg-gradient-to-r from-fuchsia-600/20 to-cyan-600/20 text-cyan-400 border border-white/10 shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+              className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'dashboard' ? 'bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 text-cyan-400 border border-white/10 shadow-xl' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
             >
-              <LayoutDashboard size={18} />
-              Portfolio Dashboard
+              <LayoutDashboard size={20} />
+              Portfolio Hub
             </button>
             <button 
               onClick={() => {
@@ -355,93 +335,99 @@ const App: React.FC = () => {
                   handleAddDress();
                 }
               }}
-              className={`w-full flex items-center gap-4 px-5 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeView === 'manager' ? 'bg-gradient-to-r from-fuchsia-600/20 to-cyan-600/20 text-cyan-400 border border-white/10 shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+              className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'manager' ? 'bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 text-cyan-400 border border-white/10 shadow-xl' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
             >
-              <Shirt size={18} />
-              Product Manager
+              <Shirt size={20} />
+              Product Editor
             </button>
           </nav>
 
-          <div className="mt-10 pt-10 border-t border-white/10">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Production Lines</p>
-              {isSyncing && <Loader2 size={10} className="text-cyan-400 animate-spin" />}
+          <div className="mt-12 pt-10 border-t border-white/10">
+            <div className="flex items-center justify-between mb-6">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Active Lines</p>
+              {isSyncing && <Loader2 size={12} className="text-cyan-400 animate-spin" />}
             </div>
-            <div className="space-y-1 max-h-[30vh] overflow-y-auto custom-scrollbar pr-2">
+            <div className="space-y-1.5 max-h-[40vh] overflow-y-auto custom-scrollbar pr-3">
               {dresses.map(d => (
                 <button 
                   key={d.id}
                   onClick={() => { setSelectedDressId(d.id); setActiveView('manager'); }}
-                  className={`w-full text-left px-4 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-between group ${selectedDressId === d.id && activeView === 'manager' ? 'bg-cyan-500/10 text-cyan-400' : 'text-slate-400 hover:text-slate-200'}`}
+                  className={`w-full text-left px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-between group ${selectedDressId === d.id && activeView === 'manager' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
                 >
                   <span className="truncate">{d.name || d.code}</span>
-                  <ChevronRight size={12} className={`opacity-0 group-hover:opacity-100 transition-opacity ${selectedDressId === d.id && activeView === 'manager' ? 'opacity-100' : ''}`} />
+                  <ChevronRight size={14} className={`transition-all ${selectedDressId === d.id && activeView === 'manager' ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'}`} />
                 </button>
               ))}
               <button 
                 onClick={handleAddDress}
                 disabled={isSyncing}
-                className="w-full text-left px-4 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-fuchsia-400 hover:bg-fuchsia-400/5 transition-all flex items-center gap-2 disabled:opacity-50"
+                className="w-full flex items-center gap-3 px-4 py-4 text-[10px] font-black uppercase tracking-widest text-fuchsia-400 hover:bg-fuchsia-400/10 rounded-xl transition-all border border-dashed border-fuchsia-400/20 mt-4 group"
               >
-                <Plus size={12} />
+                <div className="p-1 rounded-md bg-fuchsia-400/10 group-hover:bg-fuchsia-400/20">
+                  <Plus size={14} />
+                </div>
                 New Line Item
               </button>
             </div>
           </div>
         </div>
 
-        <div className="mt-auto p-8 border-t border-white/10 bg-black/20">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center overflow-hidden">
+        <div className="mt-auto p-8 border-t border-white/10 bg-black/30">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center shadow-inner overflow-hidden">
                <User size={20} className="text-slate-400" />
             </div>
-            <div className="flex-1">
-              <p className="text-[10px] font-black text-white uppercase tracking-wider truncate max-w-[140px]">{session?.user?.email}</p>
-              <p className="text-[9px] text-slate-500 font-bold uppercase">System Operator</p>
+            <div className="flex-1 overflow-hidden">
+              <p className="text-[10px] font-black text-white uppercase tracking-wider truncate">{session?.user?.email}</p>
+              <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Authenticated</p>
             </div>
           </div>
           <button 
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-white/5 border border-white/10 text-rose-400 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-rose-500/10 hover:border-rose-500/20 transition-all"
+            className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-rose-500 hover:text-white transition-all duration-300"
           >
-            <LogOut size={14} />
-            Logout Session
+            <LogOut size={16} />
+            Kill Session
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto bg-slate-50 min-h-screen custom-scrollbar">
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-             <div className="md:hidden w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center">
-                <span className="text-white text-xs font-black italic">M9</span>
+      <main className="flex-1 overflow-y-auto bg-slate-50 min-h-screen custom-scrollbar flex flex-col">
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200 px-10 py-5 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-5">
+             <div className="md:hidden w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center">
+                <span className="text-white text-sm font-black italic">M9</span>
              </div>
-             <h1 className="text-sm font-black text-slate-800 uppercase tracking-[0.3em]">
-               {activeView === 'dashboard' ? 'Global Portfolio Analysis' : 'Product Selection Manager'}
-             </h1>
+             <div className="flex flex-col">
+               <h1 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-1">M9 Command Center</h1>
+               <p className="text-lg font-black text-slate-900 uppercase tracking-tight">
+                 {activeView === 'dashboard' ? 'Portfolio Overview' : 'Production Ledger Editor'}
+               </p>
+             </div>
           </div>
-          <div className="flex items-center gap-3">
-             <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 bg-slate-100 rounded-full border border-slate-200">
+          <div className="flex items-center gap-4">
+             <div className="hidden lg:flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-2xl border border-slate-200 shadow-inner">
                 {isSaving ? (
-                  <div className="flex items-center gap-2 animate-pulse">
-                    <CloudUpload size={12} className="text-amber-500" />
-                    <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Saving...</span>
+                  <div className="flex items-center gap-3 animate-pulse">
+                    <CloudUpload size={14} className="text-amber-500" />
+                    <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Syncing Cloud</span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <Cloud size={12} className="text-emerald-500" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Cloud Ready</span>
+                  <div className="flex items-center gap-3">
+                    <Cloud size={14} className="text-emerald-500" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">All Sync Clear</span>
                   </div>
                 )}
              </div>
-             <div className="h-6 w-[1px] bg-slate-200 mx-2 hidden lg:block"></div>
-             <Button onClick={handleAddDress} disabled={isSyncing} variant="primary" icon={Plus} className="h-9 px-4 text-[10px] uppercase tracking-widest font-black">
-               New Production
+             <div className="h-8 w-[1px] bg-slate-200 mx-2 hidden lg:block"></div>
+             <Button onClick={handleAddDress} disabled={isSyncing} variant="primary" className="h-11 px-6 text-[10px] uppercase tracking-[0.2em] font-black shadow-xl">
+               <Plus size={18} className="mr-2" />
+               Build New Project
              </Button>
           </div>
         </header>
 
-        <div className="p-8">
+        <div className="p-10 flex-1">
           {activeView === 'dashboard' ? (
             <Dashboard dresses={dresses} onEditDress={(id) => { setSelectedDressId(id); setActiveView('manager'); }} />
           ) : (

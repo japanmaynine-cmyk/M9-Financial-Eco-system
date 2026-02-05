@@ -29,14 +29,22 @@ export const Card: React.FC<CardProps> = ({ children, className = "", accentColo
 
 interface ButtonProps {
   children: React.ReactNode;
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'icon';
   className?: string;
   icon?: LucideIcon;
+  disabled?: boolean;
 }
 
-export const Button: React.FC<ButtonProps> = ({ children, onClick, variant = 'primary', className = "", icon: Icon }) => {
-  const baseStyle = "px-4 py-2 rounded-lg font-bold text-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-sm backdrop-blur-sm";
+export const Button: React.FC<ButtonProps> = ({ 
+  children, 
+  onClick, 
+  variant = 'primary', 
+  className = "", 
+  icon: Icon,
+  disabled = false
+}) => {
+  const baseStyle = "px-4 py-2 rounded-lg font-bold text-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-sm backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100";
   const variants = {
     primary: "bg-gradient-to-r from-fuchsia-600 to-cyan-600 text-white hover:opacity-90 hover:shadow-md hover:scale-[1.02]",
     secondary: "bg-white/80 text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300",
@@ -46,7 +54,11 @@ export const Button: React.FC<ButtonProps> = ({ children, onClick, variant = 'pr
   };
 
   return (
-    <button onClick={onClick} className={`${baseStyle} ${variants[variant]} ${className}`}>
+    <button 
+      onClick={onClick} 
+      disabled={disabled}
+      className={`${baseStyle} ${variants[variant]} ${className}`}
+    >
       {Icon && <Icon size={18} />}
       {children}
     </button>
