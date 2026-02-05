@@ -1,10 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Scissors, Shirt, Activity, Settings, DollarSign, TrendingUp, PieChart, Star, ShieldCheck, Calendar, ChevronDown
+  Scissors, Shirt, Activity, Settings, DollarSign, TrendingUp, PieChart, Star, ShieldCheck, Calendar, ChevronDown, RefreshCw
 } from 'lucide-react';
 import { Dress, Metrics } from '../types';
-import { KpiCard, Card } from '../components';
+import { KpiCard, Card, Button } from '../components';
 import { calculateMetrics } from '../logic';
 
 interface DashboardProps {
@@ -17,21 +17,39 @@ interface QuarterParams {
   sales: number;
 }
 
+interface ComputedQuarterRow {
+  id: number;
+  name: string;
+  code: string;
+  category: string;
+  selectedQ: string;
+  unitCost: number;
+  retailPrice: number;
+  baseQty: number;
+  prodMultQty: number;
+  prodInv: number;
+  potentialSales: number;
+}
+
 const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
   const [dashboardType, setDashboardType] = useState<'fabric' | 'financial' | 'quarterly'>('fabric');
   
-  // Quarterly Planning State
+  // Quarterly Planning Input State (Drafts)
+  // mult is now a direct multiplier (e.g., 1.5 means 1.5x Base Qty)
   const [qConfig, setQConfig] = useState<Record<string, QuarterParams>>({
-    Q1: { mult: 1.5, sales: 85 },
-    Q2: { mult: 2.0, sales: 90 },
-    Q3: { mult: 2.5, sales: 95 },
-    All: { mult: 1.0, sales: 100 }
+    Q1: { mult: 1, sales: 85 },
+    Q2: { mult: 1.5, sales: 90 },
+    Q3: { mult: 2, sales: 95 },
+    All: { mult: 0, sales: 100 } 
   });
 
   const [dressQuarters, setDressQuarters] = useState<Record<number, string>>({});
+  
+  // The actual results shown in the table (Snapshot)
+  const [computedLedger, setComputedLedger] = useState<ComputedQuarterRow[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const activeDresses = dresses.filter(d => d.isChecked !== false);
-  
   const itemsWithMetrics = activeDresses.map(dress => ({
     ...dress,
     metrics: calculateMetrics(dress)
@@ -49,42 +67,83 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
     };
   }, { totalInvestment: 0, totalRevenue: 0, grossProfit: 0, totalBEP: 0, totalFabric: 0, totalQty: 0, items: [] as any[] });
 
-  // Quarterly Calculations
-  const quarterlyLedger = itemsWithMetrics.map(item => {
-    const selectedQ = dressQuarters[item.id] || 'All';
-    const params = qConfig[selectedQ];
-    const unitCost = item.metrics.avgVarCost;
-    const retailPrice = item.metrics.avgPrice;
-    const baseQty = item.metrics.totalQty;
+  // Function to run the calculation based on the current inputs
+  const handleGeneratePlan = () => {
+    setIsGenerating(true);
+    
+    // Slight delay to simulate processing for UX feedback
+    setTimeout(() => {
+      const results = itemsWithMetrics.map(item => {
+        const selectedQ = dressQuarters[item.id] || 'All';
+        const unitCost = item.metrics.avgVarCost;
+        const retailPrice = item.metrics.avgPrice;
+        const baseQty = item.metrics.totalQty;
 
-    const prodInv = (unitCost * baseQty) * params.mult;
-    const potentialSales = (retailPrice * (baseQty * params.mult)) * (params.sales / 100);
+        let prodMultQty = 0;
+        let prodInv = 0;
+        let potentialSales = 0;
 
-    return {
-      ...item,
-      selectedQ,
-      prodInv,
-      potentialSales,
-      unitCost,
-      retailPrice,
-      baseQty
-    };
-  });
+        if (selectedQ === 'All') {
+          // If 'All' is selected, sum calculations for Q1, Q2, and Q3
+          // Formula: ((Prod. Mult) * Base Qty)) Q1 + ((Prod. Mult) * Base Qty)) Q2 + ((Prod. Mult) * Base Qty)) Q3
+          ['Q1', 'Q2', 'Q3'].forEach(q => {
+            const params = qConfig[q];
+            
+            const qMultQty = params.mult * baseQty;
+            const qInv = qMultQty * unitCost;
+            const qSales = (retailPrice * qMultQty) * (params.sales / 100);
 
-  const totalYearInvestment = quarterlyLedger.reduce((sum, row) => sum + row.prodInv, 0);
-  const totalYearSales = quarterlyLedger.reduce((sum, row) => sum + row.potentialSales, 0);
+            prodMultQty += qMultQty;
+            prodInv += qInv;
+            potentialSales += qSales;
+          });
+        } else {
+          // Single quarter calculation: (Prod. Mult) * Base Qty
+          const params = qConfig[selectedQ];
+          prodMultQty = params.mult * baseQty;
+          prodInv = prodMultQty * unitCost;
+          potentialSales = (retailPrice * prodMultQty) * (params.sales / 100);
+        }
+
+        return {
+          id: item.id,
+          name: item.name,
+          code: item.code,
+          category: item.category,
+          selectedQ,
+          unitCost,
+          retailPrice,
+          baseQty,
+          prodMultQty,
+          prodInv,
+          potentialSales
+        };
+      });
+
+      setComputedLedger(results);
+      setIsGenerating(false);
+    }, 400);
+  };
+
+  // Initial calculation on component mount or data change
+  useEffect(() => {
+    if (computedLedger.length === 0 && itemsWithMetrics.length > 0) {
+      handleGeneratePlan();
+    }
+  }, [itemsWithMetrics.length]);
+
+  const totalYearInvestment = computedLedger.reduce((sum, row) => sum + row.prodInv, 0);
+  const totalYearSales = computedLedger.reduce((sum, row) => sum + row.potentialSales, 0);
   const totalYearProfit = totalYearSales - totalYearInvestment;
   
-  // Weighted Averages for BEP
-  const totalWeightedRetail = quarterlyLedger.reduce((sum, row) => sum + (row.retailPrice * row.baseQty), 0);
-  const totalWeightedVarCost = quarterlyLedger.reduce((sum, row) => sum + (row.unitCost * row.baseQty), 0);
-  const totalBaseQty = quarterlyLedger.reduce((sum, row) => sum + row.baseQty, 0);
+  const totalBaseQty = computedLedger.reduce((sum, row) => sum + row.baseQty, 0);
+  const totalWeightedRetail = computedLedger.reduce((sum, row) => sum + (row.retailPrice * row.baseQty), 0);
+  const totalWeightedVarCost = computedLedger.reduce((sum, row) => sum + (row.unitCost * row.baseQty), 0);
   
   const avgRetailPrice = totalBaseQty > 0 ? totalWeightedRetail / totalBaseQty : 0;
   const avgVarCost = totalBaseQty > 0 ? totalWeightedVarCost / totalBaseQty : 0;
   const breakEvenAvg = (avgRetailPrice - avgVarCost) > 0 ? totalYearInvestment / (avgRetailPrice - avgVarCost) : 0;
 
-  // Portfolio Health calculation
   const overallMargin = aggregate.totalRevenue > 0 ? (aggregate.grossProfit / aggregate.totalRevenue) * 100 : 0;
   const portfolioHealth = overallMargin > 30 ? 'Excellent' : overallMargin > 15 ? 'Stable' : 'Risk';
 
@@ -125,7 +184,6 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
   });
 
   const fabricBreakdownList = Object.values(fabricColorAggregation);
-
   const formatCurrency = (val: number) => val.toLocaleString(undefined, { maximumFractionDigits: 0 });
 
   return (
@@ -335,7 +393,7 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
                    <div className="space-y-5">
                       <div className="grid grid-cols-3 text-[10px] font-black text-slate-400 uppercase border-b pb-2 px-1">
                         <span>Period</span>
-                        <span className="text-center">Prod. Mult</span>
+                        <span className="text-center">Prod. Mult (x)</span>
                         <span className="text-right">Sales %</span>
                       </div>
                       {['Q1', 'Q2', 'Q3'].map(q => (
@@ -358,6 +416,18 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
                            </div>
                         </div>
                       ))}
+
+                      <div className="pt-4 border-t border-slate-100">
+                        <Button 
+                          onClick={handleGeneratePlan} 
+                          disabled={isGenerating} 
+                          variant="primary" 
+                          icon={RefreshCw} 
+                          className={`w-full text-[10px] uppercase tracking-widest py-3 ${isGenerating ? 'opacity-70 animate-pulse' : ''}`}
+                        >
+                          {isGenerating ? 'Generating...' : 'Generate Strategic Plan'}
+                        </Button>
+                      </div>
                    </div>
                 </Card>
               </div>
@@ -367,37 +437,41 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
                 <Card className="p-0 overflow-hidden" accentColor="emerald">
                    <div className="bg-slate-50 p-5 border-b flex justify-between items-center">
                       <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Project Financial Breakdown Ledger</h3>
+                      {computedLedger.length === 0 && <span className="text-[10px] font-black text-amber-600 animate-pulse">Click Generate to populate ledger</span>}
                    </div>
                    <div className="overflow-x-auto">
                       <table className="w-full text-left text-[11px] border-collapse">
                         <thead className="bg-slate-100/50 text-slate-500 font-black uppercase text-[10px]">
                           <tr>
-                            <th className="p-4 border-b">Dress Code</th>
+                            <th className="p-4 border-b">Dress Name</th>
                             <th className="p-4 border-b">Category</th>
                             <th className="p-4 border-b">Quarter</th>
                             <th className="p-4 border-b text-right">Unit Cost</th>
                             <th className="p-4 border-b text-right">Retail Price</th>
                             <th className="p-4 border-b text-center">Base Qty</th>
+                            <th className="p-4 border-b text-center">Prod. Mult. QTY</th>
                             <th className="p-4 border-b text-right">Production Inv</th>
                             <th className="p-4 border-b text-right">Potential Sales</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 bg-white">
-                           {quarterlyLedger.map(row => (
+                           {computedLedger.map(row => (
                              <tr key={row.id} className="hover:bg-slate-50 transition-colors">
-                               <td className="p-4 font-black text-slate-800 uppercase">{row.code}</td>
+                               <td className="p-4 font-black text-slate-800 uppercase">{row.name || row.code}</td>
                                <td className="p-4 text-slate-500">{row.category}</td>
                                <td className="p-2">
                                   <div className="relative inline-block w-full">
                                     <select 
                                       className="bg-slate-100 border rounded px-2 py-1 text-[10px] font-bold appearance-none w-full"
                                       value={row.selectedQ}
-                                      onChange={e => setDressQuarters({...dressQuarters, [row.id]: e.target.value})}
+                                      onChange={e => {
+                                        setDressQuarters({...dressQuarters, [row.id]: e.target.value});
+                                      }}
                                     >
-                                      <option value="All">All</option>
-                                      <option value="Q1">Q1</option>
-                                      <option value="Q2">Q2</option>
-                                      <option value="Q3">Q3</option>
+                                      <option value="All">All Quarters</option>
+                                      <option value="Q1">Q1 Only</option>
+                                      <option value="Q2">Q2 Only</option>
+                                      <option value="Q3">Q3 Only</option>
                                     </select>
                                     <ChevronDown size={10} className="absolute right-1 top-2.5 pointer-events-none opacity-50" />
                                   </div>
@@ -405,20 +479,32 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
                                <td className="p-4 text-right">{formatCurrency(row.unitCost)}</td>
                                <td className="p-4 text-right">{formatCurrency(row.retailPrice)}</td>
                                <td className="p-4 text-center">
-                                  <span className="border rounded px-3 py-1 bg-white font-black">{row.baseQty}</span>
+                                  <span className="border rounded px-2 py-1 bg-white font-black">{row.baseQty}</span>
+                               </td>
+                               <td className="p-4 text-center">
+                                  <span className="border rounded px-2 py-1 bg-indigo-50 text-indigo-700 font-black">{Math.round(row.prodMultQty)}</span>
                                </td>
                                <td className="p-4 text-right font-black" style={{ color: '#D4A017' }}>{formatCurrency(row.prodInv)}</td>
                                <td className="p-4 text-right font-black" style={{ color: '#2E7D32' }}>{formatCurrency(row.potentialSales)}</td>
                              </tr>
                            ))}
+                           {computedLedger.length === 0 && (
+                             <tr>
+                               <td colSpan={9} className="p-10 text-center text-slate-400 font-black uppercase tracking-widest opacity-50">
+                                 System ready. Adjust quarterly config and click "Generate Strategic Plan" to begin.
+                               </td>
+                             </tr>
+                           )}
                         </tbody>
-                        <tfoot className="bg-slate-50 border-t-2">
-                           <tr className="font-black">
-                              <td colSpan={6} className="p-4 text-right text-[10px] uppercase tracking-widest text-slate-400">Ledger Totals:</td>
-                              <td className="p-4 text-right text-lg" style={{ color: '#D4A017' }}>{formatCurrency(totalYearInvestment)}</td>
-                              <td className="p-4 text-right text-lg" style={{ color: '#2E7D32' }}>{formatCurrency(totalYearSales)}</td>
-                           </tr>
-                        </tfoot>
+                        {computedLedger.length > 0 && (
+                          <tfoot className="bg-slate-50 border-t-2">
+                            <tr className="font-black">
+                                <td colSpan={7} className="p-4 text-right text-[10px] uppercase tracking-widest text-slate-400">Snapshot Totals:</td>
+                                <td className="p-4 text-right text-lg" style={{ color: '#D4A017' }}>{formatCurrency(totalYearInvestment)}</td>
+                                <td className="p-4 text-right text-lg" style={{ color: '#2E7D32' }}>{formatCurrency(totalYearSales)}</td>
+                            </tr>
+                          </tfoot>
+                        )}
                       </table>
                    </div>
                 </Card>

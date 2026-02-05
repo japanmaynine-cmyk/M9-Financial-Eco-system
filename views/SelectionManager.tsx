@@ -297,189 +297,210 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
     );
   };
 
-  const renderTab2 = () => (
-    <div className="space-y-6 animate-fadeIn">
-      <Card className="p-0 overflow-hidden sticky top-20 z-10 shadow-lg border-fuchsia-400" accentColor="fuchsia">
-        <div 
-          className="bg-slate-50 p-4 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-colors"
-          onClick={() => setIsConfigExpanded(!isConfigExpanded)}
-        >
-          <div className="flex items-center gap-3">
-            <Settings size={18} className="text-fuchsia-500" />
-            <span className="text-xs font-black uppercase tracking-widest text-slate-700">Global Cost Configuration</span>
-          </div>
-          <div className="flex items-center gap-4">
-             <Button onClick={(e) => { e.stopPropagation(); showNotify("Data Regenerated"); }} icon={RefreshCw} variant="primary" className="h-8 py-0 px-3 text-[10px]">Regenerate</Button>
-             {isConfigExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </div>
-        </div>
-        {isConfigExpanded && (
-          <div className="p-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 bg-white border-t">
-            <Input label="Fixed Cost" value={dress.costs.fixedSalary} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, fixedSalary: v})} />
-            <Input label="Sewing Cost" value={dress.costs.sewingCost} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, sewingCost: v})} />
-            <Input label="Accessories" value={dress.costs.accessoriesCost} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, accessoriesCost: v})} />
-            <Input label="Wastage %" value={dress.costs.wastagePct} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, wastagePct: v})} suffix="%" />
-            <Input label="Marketing %" value={dress.costs.marketingPct} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, marketingPct: v})} suffix="%" />
-            <Input label="Trans & Ops %" value={dress.costs.opsPct} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, opsPct: v})} suffix="%" />
-            <Input label="Profit Target %" value={dress.costs.profitTargetPct} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, profitTargetPct: v})} suffix="%" />
-          </div>
-        )}
-      </Card>
+  const renderTab2 = () => {
+    // Logic for summary calculations
+    const totalFabricBaseCost = metrics.sizeMetrics.reduce((sum, m) => 
+      sum + m.fabricRows.reduce((fSum, fr) => fSum + (fr.unitCost * m.qty), 0), 0
+    );
+    const totalSewingAccCost = metrics.sizeMetrics.reduce((sum, m) => sum + m.sewingRowCost + m.accRowCost, 0);
+    const totalCostCODs = totalFabricBaseCost + totalSewingAccCost;
 
-      <Card className="p-0 overflow-hidden" accentColor="blue">
-        <div className="p-6 bg-white border-b flex items-center justify-between">
-          <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-800 flex items-center gap-2">
-            <DollarSign size={18} className="text-blue-500"/> Investment Breakdown Result
-          </h3>
-          <span className="text-[10px] font-bold text-slate-400">Click "Regenerate" to update calculations</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-[11px] border-collapse">
-            <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-tighter">
-              <tr className="border-b">
-                <th className="p-4 border-b border-slate-200 font-bold text-left pl-6">Composition</th>
-                <th className="p-4 border-b border-slate-200">Size</th>
-                <th className="p-4 border-b border-slate-200 text-center">Fab Qty (Yds)</th>
-                <th className="p-4 border-b border-slate-200 text-right">Ref Price</th>
-                <th className="p-4 border-b border-slate-200 text-right">Unit Cost</th>
-                <th className="p-4 border-b border-slate-200 text-right">Wastage ({dress.costs.wastagePct}%)</th>
-                <th className="p-4 border-b border-slate-200 text-center">Prod Qty</th>
-                <th className="p-4 border-b border-slate-200 text-right pr-6">Total Cost</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {metrics.sizeMetrics.map((m) => (
-                <React.Fragment key={m.size}>
-                  {m.fabricRows.map((fr) => (
-                    <tr key={fr.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-4 pl-6 font-medium text-slate-700">{fr.type} ({fr.code})</td>
-                      <td className="p-4 uppercase font-bold text-slate-400">{m.size}</td>
-                      <td className="p-4 text-center font-mono">{fr.consRate.toFixed(2)}</td>
-                      <td className="p-4 text-right font-medium">{formatCurrency(fr.refPrice)}</td>
-                      <td className="p-4 text-right font-medium">{formatCurrency(fr.unitCost)}</td>
-                      <td className="p-4 text-right text-rose-500 font-bold">{formatCurrency(fr.wastageAmt)}</td>
-                      <td className="p-4 text-center font-black">{m.qty}</td>
-                      <td className="p-4 text-right font-black text-slate-900 pr-6">{formatCurrency(fr.totalRowCost)}</td>
-                    </tr>
-                  ))}
-                  <tr className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4 pl-6 font-medium text-slate-700">Sewing Cost</td>
-                    <td className="p-4 uppercase font-bold text-slate-400">{m.size}</td>
-                    <td className="p-4 text-center text-slate-300">-</td>
-                    <td className="p-4 text-right text-slate-300">-</td>
-                    <td className="p-4 text-right font-medium">{formatCurrency(dress.costs.sewingCost)}</td>
-                    <td className="p-4 text-right text-slate-300">-</td>
-                    <td className="p-4 text-center font-black">{m.qty}</td>
-                    <td className="p-4 text-right font-black text-slate-900 pr-6">{formatCurrency(m.sewingRowCost)}</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4 pl-6 font-medium text-slate-700">Accessories</td>
-                    <td className="p-4 uppercase font-bold text-slate-400">{m.size}</td>
-                    <td className="p-4 text-center text-slate-300">-</td>
-                    <td className="p-4 text-right text-slate-300">-</td>
-                    <td className="p-4 text-right font-medium">{formatCurrency(dress.costs.accessoriesCost)}</td>
-                    <td className="p-4 text-right text-slate-300">-</td>
-                    <td className="p-4 text-center font-black">{m.qty}</td>
-                    <td className="p-4 text-right font-black text-slate-900 pr-6">{formatCurrency(m.accRowCost)}</td>
-                  </tr>
-                  <tr className="bg-slate-50 font-black border-t-2 border-slate-200">
-                    <td colSpan={7} className="p-4 text-right text-slate-500 uppercase italic text-[9px] tracking-widest">
-                      Subtotal + Wastage ({dress.costs.wastagePct}%) + Marketing ({dress.costs.marketingPct}%) + Trans. & Ops. ({dress.costs.opsPct}%) = Total Unit Investment:
-                    </td>
-                    <td className="p-4 text-right text-indigo-600 font-black pr-6 text-xs">
-                      {formatCurrency(m.batchInv)}
-                    </td>
-                  </tr>
-                </React.Fragment>
-              ))}
-            </tbody>
-            <tfoot className="bg-white border-t-4 border-slate-900">
-              <tr>
-                <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Marketing Cost ({dress.costs.marketingPct}%):</td>
-                <td className="p-3 text-right font-black text-slate-700 pr-6">{formatCurrency(metrics.totalMarketingCost)}</td>
-              </tr>
-              <tr>
-                <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Trans. & Ops. Overhead ({dress.costs.opsPct}%):</td>
-                <td className="p-3 text-right font-black text-slate-700 pr-6">{formatCurrency(metrics.totalOpsCost)}</td>
-              </tr>
-              <tr>
-                <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Total Variable Investment:</td>
-                <td className="p-3 text-right font-black text-slate-700 pr-6">{formatCurrency(metrics.totalVariableInvestment)}</td>
-              </tr>
-              <tr>
-                <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Overhead Fixed Cost:</td>
-                <td className="p-3 text-right font-black text-slate-700 pr-6">{formatCurrency(metrics.totalFixedCost)}</td>
-              </tr>
-              <tr className="bg-slate-900 text-white border-t-2 border-indigo-500">
-                <td colSpan={7} className="p-6 text-right uppercase font-black text-xs tracking-[0.2em] italic">TOTAL PROJECT INVESTMENT:</td>
-                <td className="p-6 text-right font-black text-blue-400 pr-6 text-2xl tracking-tighter">
-                   {formatCurrency(metrics.totalInvestment)} MMK
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </Card>
+    const totalWastageCost = metrics.sizeMetrics.reduce((sum, m) => 
+      sum + m.fabricRows.reduce((fSum, fr) => fSum + (fr.wastageAmt * m.qty), 0), 0
+    );
 
-      <Card className="p-0 overflow-hidden" accentColor="emerald">
-        <div className="p-6 bg-white border-b">
-           <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-800 flex items-center gap-2">
-            <PieChart size={18} className="text-emerald-500"/> Sales & Profitability Result
-          </h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-[11px] border-collapse">
-            <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-tighter">
-              <tr className="border-b">
-                <th className="p-4 border-b border-slate-200 pl-6">Size</th>
-                <th className="p-4 border-b border-slate-200 text-right">Var Cost</th>
-                <th className="p-4 border-b border-slate-200 text-center">% Profit</th>
-                <th className="p-4 border-b border-slate-200 text-right">Profit Amt</th>
-                <th className="p-4 border-b border-slate-200 text-right">Calc Price</th>
-                <th className="p-4 border-b border-slate-200 text-right">Retail Price (Editable)</th>
-                <th className="p-4 border-b border-slate-200 text-center">Qty</th>
-                <th className="p-4 border-b border-slate-200 text-right pr-6">Total Sales</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {metrics.sizeMetrics.map(m => (
-                <tr key={m.size} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-4 pl-6 font-black uppercase text-slate-700">{m.size}</td>
-                  <td className="p-4 text-right font-medium">{formatCurrency(m.varUnitCost)}</td>
-                  <td className="p-4 text-center font-bold text-slate-400">{dress.costs.profitTargetPct}%</td>
-                  <td className="p-4 text-right font-bold text-green-600">{formatCurrency(m.profitAmt)}</td>
-                  <td className="p-4 text-right font-medium text-slate-400">{formatCurrency(m.calcPrice)}</td>
-                  <td className="p-2">
-                    <input 
-                      type="number" 
-                      className="w-full bg-slate-50 border rounded-lg p-2 text-right font-black focus:ring-2 focus:ring-emerald-500 outline-none" 
-                      value={m.retailPrice} 
-                      onChange={e => updateDress(dress.id, 'salesPrices', {...dress.salesPrices, [m.size]: {...dress.salesPrices[m.size], retail: parseFloat(e.target.value)||0}})} 
-                    />
-                  </td>
-                  <td className="p-4 text-center font-black">{m.qty}</td>
-                  <td className="p-4 text-right font-black text-emerald-600 pr-6">{formatCurrency(m.totalSales)}</td>
+    return (
+      <div className="space-y-6 animate-fadeIn">
+        <Card className="p-0 overflow-hidden sticky top-20 z-10 shadow-lg border-fuchsia-400" accentColor="fuchsia">
+          <div 
+            className="bg-slate-50 p-4 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-colors"
+            onClick={() => setIsConfigExpanded(!isConfigExpanded)}
+          >
+            <div className="flex items-center gap-3">
+              <Settings size={18} className="text-fuchsia-500" />
+              <span className="text-xs font-black uppercase tracking-widest text-slate-700">Global Cost Configuration</span>
+            </div>
+            <div className="flex items-center gap-4">
+               <Button onClick={(e) => { e.stopPropagation(); showNotify("Data Regenerated"); }} icon={RefreshCw} variant="primary" className="h-8 py-0 px-3 text-[10px]">Regenerate</Button>
+               {isConfigExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </div>
+          </div>
+          {isConfigExpanded && (
+            <div className="p-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 bg-white border-t">
+              <Input label="Fixed Cost" value={dress.costs.fixedSalary} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, fixedSalary: v})} />
+              <Input label="Sewing Cost" value={dress.costs.sewingCost} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, sewingCost: v})} />
+              <Input label="Accessories" value={dress.costs.accessoriesCost} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, accessoriesCost: v})} />
+              <Input label="Wastage %" value={dress.costs.wastagePct} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, wastagePct: v})} suffix="%" />
+              <Input label="Marketing %" value={dress.costs.marketingPct} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, marketingPct: v})} suffix="%" />
+              <Input label="Trans & Ops %" value={dress.costs.opsPct} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, opsPct: v})} suffix="%" />
+              <Input label="Profit Target %" value={dress.costs.profitTargetPct} onChange={v => updateDress(dress.id, 'costs', {...dress.costs, profitTargetPct: v})} suffix="%" />
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-0 overflow-hidden" accentColor="blue">
+          <div className="p-6 bg-white border-b flex items-center justify-between">
+            <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-800 flex items-center gap-2">
+              <DollarSign size={18} className="text-blue-500"/> Investment Breakdown Result
+            </h3>
+            <span className="text-[10px] font-bold text-slate-400">Click "Regenerate" to update calculations</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11px] border-collapse">
+              <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-tighter">
+                <tr className="border-b">
+                  <th className="p-4 border-b border-slate-200 font-bold text-left pl-6">Composition</th>
+                  <th className="p-4 border-b border-slate-200">Size</th>
+                  <th className="p-4 border-b border-slate-200 text-center">Fab Qty (Yds)</th>
+                  <th className="p-4 border-b border-slate-200 text-right">Ref Price</th>
+                  <th className="p-4 border-b border-slate-200 text-right">Unit Cost</th>
+                  <th className="p-4 border-b border-slate-200 text-right">Wastage ({dress.costs.wastagePct}%)</th>
+                  <th className="p-4 border-b border-slate-200 text-center">Prod Qty</th>
+                  <th className="p-4 border-b border-slate-200 text-right pr-6">Total Cost</th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot className="bg-emerald-50 border-t-2 border-emerald-500">
-               <tr>
-                  <td colSpan={7} className="p-6 text-right uppercase font-black text-emerald-800 text-xs tracking-widest">TOTAL REVENUE:</td>
-                  <td className="p-6 text-right font-black text-emerald-700 pr-6 text-2xl tracking-tighter">
-                    {formatCurrency(metrics.totalRevenue)} MMK
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {metrics.sizeMetrics.map((m) => (
+                  <React.Fragment key={m.size}>
+                    {m.fabricRows.map((fr) => (
+                      <tr key={fr.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-4 pl-6 font-medium text-slate-700">{fr.type} ({fr.code})</td>
+                        <td className="p-4 uppercase font-bold text-slate-400">{m.size}</td>
+                        <td className="p-4 text-center font-mono">{fr.consRate.toFixed(2)}</td>
+                        <td className="p-4 text-right font-medium">{formatCurrency(fr.refPrice)}</td>
+                        <td className="p-4 text-right font-medium">{formatCurrency(fr.unitCost)}</td>
+                        <td className="p-4 text-right text-rose-500 font-bold">{formatCurrency(fr.wastageAmt)}</td>
+                        <td className="p-4 text-center font-black">{m.qty}</td>
+                        <td className="p-4 text-right font-black text-slate-900 pr-6">{formatCurrency(fr.totalRowCost)}</td>
+                      </tr>
+                    ))}
+                    <tr className="hover:bg-slate-50 transition-colors">
+                      <td className="p-4 pl-6 font-medium text-slate-700">Sewing Cost</td>
+                      <td className="p-4 uppercase font-bold text-slate-400">{m.size}</td>
+                      <td className="p-4 text-center text-slate-300">-</td>
+                      <td className="p-4 text-right text-slate-300">-</td>
+                      <td className="p-4 text-right font-medium">{formatCurrency(dress.costs.sewingCost)}</td>
+                      <td className="p-4 text-right text-slate-300">-</td>
+                      <td className="p-4 text-center font-black">{m.qty}</td>
+                      <td className="p-4 text-right font-black text-slate-900 pr-6">{formatCurrency(m.sewingRowCost)}</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50 transition-colors">
+                      <td className="p-4 pl-6 font-medium text-slate-700">Accessories</td>
+                      <td className="p-4 uppercase font-bold text-slate-400">{m.size}</td>
+                      <td className="p-4 text-center text-slate-300">-</td>
+                      <td className="p-4 text-right text-slate-300">-</td>
+                      <td className="p-4 text-right font-medium">{formatCurrency(dress.costs.accessoriesCost)}</td>
+                      <td className="p-4 text-right text-slate-300">-</td>
+                      <td className="p-4 text-center font-black">{m.qty}</td>
+                      <td className="p-4 text-right font-black text-slate-900 pr-6">{formatCurrency(m.accRowCost)}</td>
+                    </tr>
+                    <tr className="bg-slate-50 font-black border-t-2 border-slate-200">
+                      <td colSpan={7} className="p-4 text-right text-slate-500 uppercase italic text-[9px] tracking-widest">
+                        Subtotal + Wastage ({dress.costs.wastagePct}%) + Marketing ({dress.costs.marketingPct}%) + Trans. & Ops. ({dress.costs.opsPct}%) = Total Unit Investment:
+                      </td>
+                      <td className="p-4 text-right text-indigo-600 font-black pr-6 text-xs">
+                        {formatCurrency(m.batchInv)}
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                ))}
+              </tbody>
+              <tfoot className="bg-white border-t-4 border-slate-900">
+                <tr className="border-b border-slate-100">
+                  <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Total Cost CODs (Fabrics + Processing):</td>
+                  <td className="p-3 text-right font-black text-slate-700 pr-6">{formatCurrency(totalCostCODs)}</td>
+                </tr>
+                <tr className="border-b border-slate-100">
+                  <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Total Wastage Cost ({dress.costs.wastagePct}%):</td>
+                  <td className="p-3 text-right font-black text-rose-500 pr-6">{formatCurrency(totalWastageCost)}</td>
+                </tr>
+                <tr>
+                  <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Marketing Cost ({dress.costs.marketingPct}%):</td>
+                  <td className="p-3 text-right font-black text-slate-700 pr-6">{formatCurrency(metrics.totalMarketingCost)}</td>
+                </tr>
+                <tr>
+                  <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Trans. & Ops. Overhead ({dress.costs.opsPct}%):</td>
+                  <td className="p-3 text-right font-black text-slate-700 pr-6">{formatCurrency(metrics.totalOpsCost)}</td>
+                </tr>
+                <tr>
+                  <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Total Variable Investment:</td>
+                  <td className="p-3 text-right font-black text-slate-700 pr-6">{formatCurrency(metrics.totalVariableInvestment)}</td>
+                </tr>
+                <tr>
+                  <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Overhead Fixed Cost:</td>
+                  <td className="p-3 text-right font-black text-slate-700 pr-6">{formatCurrency(metrics.totalFixedCost)}</td>
+                </tr>
+                <tr className="bg-slate-900 text-white border-t-2 border-indigo-500">
+                  <td colSpan={7} className="p-6 text-right uppercase font-black text-xs tracking-[0.2em] italic">TOTAL PROJECT INVESTMENT:</td>
+                  <td className="p-6 text-right font-black text-blue-400 pr-6 text-2xl tracking-tighter">
+                     {formatCurrency(metrics.totalInvestment)} MMK
                   </td>
-               </tr>
-            </tfoot>
-          </table>
-        </div>
-      </Card>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
 
-      <div className="flex justify-between items-center mt-10">
-        <Button onClick={() => setActiveTab(1)} variant="secondary" icon={ChevronRight} className="rotate-180">Previous Step</Button>
-        <Button onClick={() => setActiveTab(3)} icon={CheckCircle}>Confirm Production Plan</Button>
+        <Card className="p-0 overflow-hidden" accentColor="emerald">
+          <div className="p-6 bg-white border-b">
+             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-800 flex items-center gap-2">
+              <PieChart size={18} className="text-emerald-500"/> Sales & Profitability Result
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11px] border-collapse">
+              <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-tighter">
+                <tr className="border-b">
+                  <th className="p-4 border-b border-slate-200 pl-6">Size</th>
+                  <th className="p-4 border-b border-slate-200 text-right">Var Cost</th>
+                  <th className="p-4 border-b border-slate-200 text-center">% Profit</th>
+                  <th className="p-4 border-b border-slate-200 text-right">Profit Amt</th>
+                  <th className="p-4 border-b border-slate-200 text-right">Calc Price</th>
+                  <th className="p-4 border-b border-slate-200 text-right">Retail Price (Editable)</th>
+                  <th className="p-4 border-b border-slate-200 text-center">Qty</th>
+                  <th className="p-4 border-b border-slate-200 text-right pr-6">Total Sales</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {metrics.sizeMetrics.map(m => (
+                  <tr key={m.size} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-4 pl-6 font-black uppercase text-slate-700">{m.size}</td>
+                    <td className="p-4 text-right font-medium">{formatCurrency(m.varUnitCost)}</td>
+                    <td className="p-4 text-center font-bold text-slate-400">{dress.costs.profitTargetPct}%</td>
+                    <td className="p-4 text-right font-bold text-green-600">{formatCurrency(m.profitAmt)}</td>
+                    <td className="p-4 text-right font-medium text-slate-400">{formatCurrency(m.calcPrice)}</td>
+                    <td className="p-2">
+                      <input 
+                        type="number" 
+                        className="w-full bg-slate-50 border rounded-lg p-2 text-right font-black focus:ring-2 focus:ring-emerald-500 outline-none" 
+                        value={m.retailPrice} 
+                        onChange={e => updateDress(dress.id, 'salesPrices', {...dress.salesPrices, [m.size]: {...dress.salesPrices[m.size], retail: parseFloat(e.target.value)||0}})} 
+                      />
+                    </td>
+                    <td className="p-4 text-center font-black">{m.qty}</td>
+                    <td className="p-4 text-right font-black text-emerald-600 pr-6">{formatCurrency(m.totalSales)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-emerald-50 border-t-2 border-emerald-500">
+                 <tr>
+                    <td colSpan={7} className="p-6 text-right uppercase font-black text-emerald-800 text-xs tracking-widest">TOTAL REVENUE:</td>
+                    <td className="p-6 text-right font-black text-emerald-700 pr-6 text-2xl tracking-tighter">
+                      {formatCurrency(metrics.totalRevenue)} MMK
+                    </td>
+                 </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
+
+        <div className="flex justify-between items-center mt-10">
+          <Button onClick={() => setActiveTab(1)} variant="secondary" icon={ChevronRight} className="rotate-180">Previous Step</Button>
+          <Button onClick={() => setActiveTab(3)} icon={CheckCircle}>Confirm Production Plan</Button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderTab3 = () => {
     const maxUnits = Math.max(metrics.totalQty * 1.5, metrics.bepUnits * 1.5, 50);

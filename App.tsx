@@ -374,7 +374,7 @@ const App: React.FC = () => {
                   onClick={() => { setSelectedDressId(d.id); setActiveView('manager'); }}
                   className={`w-full text-left px-4 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-between group ${selectedDressId === d.id && activeView === 'manager' ? 'bg-cyan-500/10 text-cyan-400' : 'text-slate-400 hover:text-slate-200'}`}
                 >
-                  <span className="truncate">{d.code}</span>
+                  <span className="truncate">{d.name || d.code}</span>
                   <ChevronRight size={12} className={`opacity-0 group-hover:opacity-100 transition-opacity ${selectedDressId === d.id && activeView === 'manager' ? 'opacity-100' : ''}`} />
                 </button>
               ))}
