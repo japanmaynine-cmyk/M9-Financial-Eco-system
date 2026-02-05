@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Scissors, Shirt, Activity, Settings, DollarSign, TrendingUp, PieChart, Star, ShieldCheck, Calendar, ChevronDown, RefreshCw, FileText, BarChart3, Target
+  Scissors, Shirt, Activity, Settings, DollarSign, TrendingUp, PieChart, Star, ShieldCheck, Calendar, ChevronDown, RefreshCw, FileText, BarChart3, Target, CheckCircle2
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ComposedChart, Line
@@ -37,7 +37,6 @@ interface ComputedQuarterRow {
 const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
   const [dashboardType, setDashboardType] = useState<'fabric' | 'financial' | 'quarterly'>('fabric');
   
-  // Prod. Mult is now a direct multiplier (e.g., 1.5x)
   const [qConfig, setQConfig] = useState<Record<string, QuarterParams>>({
     Q1: { mult: 1, sales: 85 },
     Q2: { mult: 1.5, sales: 90 },
@@ -103,7 +102,7 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
     const q2 = calculateQuarter('Q2');
     const q3 = calculateQuarter('Q3');
 
-    const rows = [
+    return [
       { label: 'COST COGS (FABRICS + PROCESSING)', q1: q1.cogs, q2: q2.cogs, q3: q3.cogs },
       { label: 'WASTAGE COST', q1: q1.wastage, q2: q2.wastage, q3: q3.wastage },
       { label: 'MARKETING COST', q1: q1.marketing, q2: q2.marketing, q3: q3.marketing },
@@ -112,8 +111,6 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
       { label: 'OVERHEAD FIXED COST', q1: q1.fixed, q2: q2.fixed, q3: q3.fixed },
       { label: '(TOTAL PROJECT INVESTMENT)', q1: q1.cogs + q1.wastage + q1.marketing + q1.ops + q1.fixed, q2: q2.cogs + q2.wastage + q2.marketing + q2.ops + q2.fixed, q3: q3.cogs + q3.wastage + q3.marketing + q3.ops + q3.fixed, isTotal: true },
     ];
-
-    return rows;
   }, [itemsWithMetrics, qConfig]);
 
   // 2. Sales & Gross Profit Calculation
@@ -146,10 +143,7 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
 
   // 3. Break Even Analysis (Quarterly Planner)
   const breakEvenBreakdown = useMemo(() => {
-    // A. Total Fixed Cost (FC_x)
     const fixedRow = investmentBreakdown[5];
-    
-    // B. Weighted Average Metrics (V and P)
     const totalBaseQty = itemsWithMetrics.reduce((sum, item) => sum + item.metrics.totalQty, 0);
     const avgUnitVarCost = totalBaseQty > 0 
       ? itemsWithMetrics.reduce((sum, item) => sum + (item.metrics.avgVarCost * item.metrics.totalQty), 0) / totalBaseQty 
@@ -159,7 +153,6 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
       : 0;
 
     const contributionMargin = avgRetailPrice - avgUnitVarCost;
-
     const calculateBEU = (fc: number) => contributionMargin > 0 ? Math.ceil(fc / contributionMargin) : 0;
     
     const beu1 = calculateBEU(fixedRow.q1);
@@ -170,7 +163,6 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
     const ber2 = beu2 * avgRetailPrice;
     const ber3 = beu3 * avgRetailPrice;
 
-    // Projected Revenues from Section 2
     const rev1 = salesProfitBreakdown[1].q1;
     const rev2 = salesProfitBreakdown[1].q2;
     const rev3 = salesProfitBreakdown[1].q3;
@@ -197,6 +189,21 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
       { name: 'Q2', investment: invRow.q2, revenue: revRow.q2, bepRevenue: bepRevRow.q2 },
       { name: 'Q3', investment: invRow.q3, revenue: revRow.q3, bepRevenue: bepRevRow.q3 },
     ];
+  }, [investmentBreakdown, salesProfitBreakdown, breakEvenBreakdown]);
+
+  // Aggregate Yearly Totals for KPIs from the Breakdown Sections
+  const quarterlyKPIs = useMemo(() => {
+    const invRow = investmentBreakdown[6];
+    const revRow = salesProfitBreakdown[1];
+    const profitRow = salesProfitBreakdown[3];
+    const unitsRow = breakEvenBreakdown[3];
+
+    return {
+      totalYearInv: invRow.q1 + invRow.q2 + invRow.q3,
+      totalYearSales: revRow.q1 + revRow.q2 + revRow.q3,
+      totalYearProfit: profitRow.q1 + profitRow.q2 + profitRow.q3,
+      totalYearUnits: unitsRow.q1 + unitsRow.q2 + unitsRow.q3
+    };
   }, [investmentBreakdown, salesProfitBreakdown, breakEvenBreakdown]);
 
   const handleGeneratePlan = () => {
@@ -254,19 +261,7 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
     if (computedLedger.length === 0 && itemsWithMetrics.length > 0) {
       handleGeneratePlan();
     }
-  }, [itemsWithMetrics.length, qConfig]);
-
-  const totalYearInvestment = computedLedger.reduce((sum, row) => sum + row.prodInv, 0);
-  const totalYearSales = computedLedger.reduce((sum, row) => sum + row.potentialSales, 0);
-  const totalYearProfit = totalYearSales - totalYearInvestment;
-  
-  const totalBaseQty = computedLedger.reduce((sum, row) => sum + row.baseQty, 0);
-  const totalWeightedRetail = computedLedger.reduce((sum, row) => sum + (row.retailPrice * row.baseQty), 0);
-  const totalWeightedVarCost = computedLedger.reduce((sum, row) => sum + (row.unitCost * row.baseQty), 0);
-  
-  const avgRetailPrice = totalBaseQty > 0 ? totalWeightedRetail / totalBaseQty : 0;
-  const avgVarCost = totalBaseQty > 0 ? totalWeightedVarCost / totalBaseQty : 0;
-  const breakEvenAvg = (avgRetailPrice - avgVarCost) > 0 ? totalYearInvestment / (avgRetailPrice - avgVarCost) : 0;
+  }, [itemsWithMetrics.length]);
 
   const overallMargin = aggregate.totalRevenue > 0 ? (aggregate.grossProfit / aggregate.totalRevenue) * 100 : 0;
   const portfolioHealth = overallMargin > 30 ? 'Excellent' : overallMargin > 15 ? 'Stable' : 'Risk';
@@ -328,10 +323,10 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
         )}
         {dashboardType === 'quarterly' && (
           <>
-            <KpiCard title="Total Year Investment" value={formatCurrency(totalYearInvestment)} unit="MMK" icon={DollarSign} color="slate" />
-            <KpiCard title="Total Year Sales" value={formatCurrency(totalYearSales)} unit="MMK" icon={TrendingUp} color="emerald" />
-            <KpiCard title="Net Profit" value={formatCurrency(totalYearProfit)} unit="MMK" icon={PieChart} color="blue" />
-            <KpiCard title="Break-Even (Avg)" value={formatCurrency(Math.ceil(breakEvenAvg))} unit="Units" icon={Activity} color="indigo" />
+            <KpiCard title="Total Year Investment" value={formatCurrency(quarterlyKPIs.totalYearInv)} unit="MMK" icon={DollarSign} color="slate" />
+            <KpiCard title="Total Year Sales" value={formatCurrency(quarterlyKPIs.totalYearSales)} unit="MMK" icon={TrendingUp} color="emerald" />
+            <KpiCard title="Total Gross Profit" value={formatCurrency(quarterlyKPIs.totalYearProfit)} unit="MMK" icon={PieChart} color="blue" />
+            <KpiCard title="Total Break-Even (Avg)" value={formatCurrency(quarterlyKPIs.totalYearUnits)} unit="Units" icon={Activity} color="indigo" />
           </>
         )}
       </div>
@@ -378,17 +373,8 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
                            </div>
                         </div>
                       ))}
-
-                      <div className="pt-4 border-t border-slate-100">
-                        <Button 
-                          onClick={handleGeneratePlan} 
-                          disabled={isGenerating} 
-                          variant="primary" 
-                          icon={RefreshCw} 
-                          className={`w-full text-[10px] uppercase tracking-widest py-3 ${isGenerating ? 'opacity-70 animate-pulse' : ''}`}
-                        >
-                          {isGenerating ? 'Generating...' : 'Update Snapshots'}
-                        </Button>
+                      <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
+                         <p className="text-[9px] font-bold text-slate-400 uppercase italic">Configure multipliers and sales targets then click Validate in the ledger section below.</p>
                       </div>
                    </div>
                 </Card>
@@ -398,6 +384,15 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
                 <Card className="p-0 overflow-hidden" accentColor="emerald">
                    <div className="bg-slate-50 p-5 border-b flex justify-between items-center">
                       <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Project Financial Breakdown Ledger</h3>
+                      <Button 
+                        onClick={handleGeneratePlan} 
+                        disabled={isGenerating} 
+                        variant="primary" 
+                        icon={CheckCircle2} 
+                        className={`text-[10px] uppercase tracking-widest h-9 px-4 ${isGenerating ? 'opacity-70 animate-pulse' : ''}`}
+                      >
+                        {isGenerating ? 'Validating...' : 'Validate'}
+                      </Button>
                    </div>
                    <div className="overflow-x-auto">
                       <table className="w-full text-left text-[11px] border-collapse">
@@ -447,9 +442,9 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
                         </tbody>
                         <tfoot className="bg-slate-50 border-t-2">
                            <tr className="font-black">
-                              <td colSpan={6} className="p-4 text-right text-[10px] uppercase tracking-widest text-slate-400">Ledger Totals:</td>
-                              <td className="p-4 text-right text-lg font-mono" style={{ color: '#D4A017' }}>{formatCurrency(totalYearInvestment)}</td>
-                              <td className="p-4 text-right text-lg font-mono" style={{ color: '#2E7D32' }}>{formatCurrency(totalYearSales)}</td>
+                              <td colSpan={6} className="p-4 text-right text-[10px] uppercase tracking-widest text-slate-400">Snapshot Totals:</td>
+                              <td className="p-4 text-right text-lg font-mono" style={{ color: '#D4A017' }}>{formatCurrency(computedLedger.reduce((s,r)=>s+r.prodInv, 0))}</td>
+                              <td className="p-4 text-right text-lg font-mono" style={{ color: '#2E7D32' }}>{formatCurrency(computedLedger.reduce((s,r)=>s+r.potentialSales, 0))}</td>
                            </tr>
                         </tfoot>
                       </table>
