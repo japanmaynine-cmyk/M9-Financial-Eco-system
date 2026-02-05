@@ -298,13 +298,18 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
   };
 
   const renderTab2 = () => {
-    // Logic for summary calculations
+    // Logic for new summary calculations
+    // Sum of (Fabric Price * Cons * Qty) - this is base fabric cost without wastage
     const totalFabricBaseCost = metrics.sizeMetrics.reduce((sum, m) => 
       sum + m.fabricRows.reduce((fSum, fr) => fSum + (fr.unitCost * m.qty), 0), 0
     );
+    // Sum of (Sewing + Accessories) * qty
     const totalSewingAccCost = metrics.sizeMetrics.reduce((sum, m) => sum + m.sewingRowCost + m.accRowCost, 0);
+    
+    // Total Cost CODs = (Fabric Base) + (Sewing + Accessories)
     const totalCostCODs = totalFabricBaseCost + totalSewingAccCost;
 
+    // Total Wastage Cost = (Fabric Base) * wastage%
     const totalWastageCost = metrics.sizeMetrics.reduce((sum, m) => 
       sum + m.fabricRows.reduce((fSum, fr) => fSum + (fr.wastageAmt * m.qty), 0), 0
     );
@@ -343,7 +348,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-800 flex items-center gap-2">
               <DollarSign size={18} className="text-blue-500"/> Investment Breakdown Result
             </h3>
-            <span className="text-[10px] font-bold text-slate-400">Click "Regenerate" to update calculations</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[11px] border-collapse">
@@ -396,7 +400,7 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                     </tr>
                     <tr className="bg-slate-50 font-black border-t-2 border-slate-200">
                       <td colSpan={7} className="p-4 text-right text-slate-500 uppercase italic text-[9px] tracking-widest">
-                        Subtotal + Wastage ({dress.costs.wastagePct}%) + Marketing ({dress.costs.marketingPct}%) + Trans. & Ops. ({dress.costs.opsPct}%) = Total Unit Investment:
+                        Total Size Batch Investment (Inc. Overheads):
                       </td>
                       <td className="p-4 text-right text-indigo-600 font-black pr-6 text-xs">
                         {formatCurrency(m.batchInv)}
@@ -406,11 +410,11 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                 ))}
               </tbody>
               <tfoot className="bg-white border-t-4 border-slate-900">
-                <tr className="border-b border-slate-100">
-                  <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Total Cost CODs (Fabrics + Processing):</td>
+                <tr className="border-b border-slate-100 bg-slate-50/30">
+                  <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Total Cost CODs (Fabrics + Sewing + Acc):</td>
                   <td className="p-3 text-right font-black text-slate-700 pr-6">{formatCurrency(totalCostCODs)}</td>
                 </tr>
-                <tr className="border-b border-slate-100">
+                <tr className="border-b border-slate-100 bg-slate-50/30">
                   <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Total Wastage Cost ({dress.costs.wastagePct}%):</td>
                   <td className="p-3 text-right font-black text-rose-500 pr-6">{formatCurrency(totalWastageCost)}</td>
                 </tr>
@@ -422,7 +426,7 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                   <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Trans. & Ops. Overhead ({dress.costs.opsPct}%):</td>
                   <td className="p-3 text-right font-black text-slate-700 pr-6">{formatCurrency(metrics.totalOpsCost)}</td>
                 </tr>
-                <tr>
+                <tr className="border-t">
                   <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Total Variable Investment:</td>
                   <td className="p-3 text-right font-black text-slate-700 pr-6">{formatCurrency(metrics.totalVariableInvestment)}</td>
                 </tr>
@@ -441,6 +445,7 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
           </div>
         </Card>
 
+        {/* Sales result table... */}
         <Card className="p-0 overflow-hidden" accentColor="emerald">
           <div className="p-6 bg-white border-b">
              <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-800 flex items-center gap-2">
@@ -455,7 +460,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                   <th className="p-4 border-b border-slate-200 text-right">Var Cost</th>
                   <th className="p-4 border-b border-slate-200 text-center">% Profit</th>
                   <th className="p-4 border-b border-slate-200 text-right">Profit Amt</th>
-                  <th className="p-4 border-b border-slate-200 text-right">Calc Price</th>
                   <th className="p-4 border-b border-slate-200 text-right">Retail Price (Editable)</th>
                   <th className="p-4 border-b border-slate-200 text-center">Qty</th>
                   <th className="p-4 border-b border-slate-200 text-right pr-6">Total Sales</th>
@@ -468,7 +472,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                     <td className="p-4 text-right font-medium">{formatCurrency(m.varUnitCost)}</td>
                     <td className="p-4 text-center font-bold text-slate-400">{dress.costs.profitTargetPct}%</td>
                     <td className="p-4 text-right font-bold text-green-600">{formatCurrency(m.profitAmt)}</td>
-                    <td className="p-4 text-right font-medium text-slate-400">{formatCurrency(m.calcPrice)}</td>
                     <td className="p-2">
                       <input 
                         type="number" 
@@ -484,7 +487,7 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
               </tbody>
               <tfoot className="bg-emerald-50 border-t-2 border-emerald-500">
                  <tr>
-                    <td colSpan={7} className="p-6 text-right uppercase font-black text-emerald-800 text-xs tracking-widest">TOTAL REVENUE:</td>
+                    <td colSpan={6} className="p-6 text-right uppercase font-black text-emerald-800 text-xs tracking-widest">TOTAL REVENUE:</td>
                     <td className="p-6 text-right font-black text-emerald-700 pr-6 text-2xl tracking-tighter">
                       {formatCurrency(metrics.totalRevenue)} MMK
                     </td>
@@ -608,66 +611,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
               <p className="text-[10px] font-black uppercase text-slate-400 mb-1">BEP Units</p>
               <h4 className="text-xl font-black text-rose-600">{Math.ceil(metrics.bepUnits)} <span className="text-[10px] opacity-40 font-bold">PCS</span></h4>
            </Card>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="p-8 lg:col-span-1" accentColor="slate">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2"><PieChart size={16}/> Break-Even Analysis</h3>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-xs font-bold text-slate-700 uppercase">Fixed Cost</span>
-                <span className="text-sm font-black">{formatCurrency(metrics.totalFixedCost)} MMK</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-xs font-bold text-slate-700 uppercase">Avg Variable Cost</span>
-                <span className="text-sm font-black">{formatCurrency(Math.round(metrics.avgVarCost))} MMK</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-xs font-bold text-slate-700 uppercase">Avg Sales Price</span>
-                <span className="text-sm font-black">{formatCurrency(Math.round(metrics.avgPrice))} MMK</span>
-              </div>
-              <div className="bg-rose-50 p-4 rounded-xl border border-rose-100 mt-4">
-                <div className="flex justify-between items-center mb-1">
-                   <span className="text-[10px] font-black text-rose-600 uppercase">Break-Even Units</span>
-                   <span className="text-lg font-black text-rose-700">{Math.ceil(metrics.bepUnits)} pcs</span>
-                </div>
-                <div className="flex justify-between items-center">
-                   <span className="text-[10px] font-black text-rose-600 uppercase">BE Revenue</span>
-                   <span className="text-sm font-black text-rose-700">{formatCurrency(Math.ceil(metrics.bepUnits) * metrics.avgPrice)} MMK</span>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-8 lg:col-span-2" accentColor="indigo">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2"><Activity size={16}/> Break-Even Visualization</h3>
-            <div className="h-[350px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 30 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis 
-                    dataKey="units" 
-                    label={{ value: 'Units produced', position: 'insideBottom', offset: -20, fontSize: 10, fontWeight: 900 }} 
-                    tick={{ fontSize: 10, fontWeight: 600 }}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 10, fontWeight: 600 }}
-                    tickFormatter={(val) => (val / 1000) + 'k'}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => value.toLocaleString() + ' MMK'} 
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold' }}
-                  />
-                  <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }} />
-                  <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                  <Line type="monotone" dataKey="totalCost" name="Total Cost" stroke="#ef4444" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                  {metrics.bepUnits > 0 && (
-                    <ReferenceLine x={Math.ceil(metrics.bepUnits)} stroke="#8b5cf6" strokeDasharray="3 3" label={{ position: 'top', value: 'BEP', fontSize: 10, fill: '#8b5cf6', fontWeight: 900 }} />
-                  )}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
         </div>
 
         <div className="flex justify-between items-center">

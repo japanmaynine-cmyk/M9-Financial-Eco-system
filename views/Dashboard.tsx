@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Scissors, Shirt, Activity, Settings, DollarSign, TrendingUp, PieChart, Star, ShieldCheck, Calendar, ChevronDown, RefreshCw
+  Scissors, Shirt, Activity, Settings, DollarSign, TrendingUp, PieChart, Star, ShieldCheck, Calendar, ChevronDown, RefreshCw, FileText, BarChart3
 } from 'lucide-react';
 import { Dress, Metrics } from '../types';
 import { KpiCard, Card, Button } from '../components';
@@ -34,8 +34,7 @@ interface ComputedQuarterRow {
 const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
   const [dashboardType, setDashboardType] = useState<'fabric' | 'financial' | 'quarterly'>('fabric');
   
-  // Quarterly Planning Input State (Drafts)
-  // mult is now a direct multiplier (e.g., 1.5 means 1.5x Base Qty)
+  // Prod. Mult is now a direct multiplier (e.g., 1.5x)
   const [qConfig, setQConfig] = useState<Record<string, QuarterParams>>({
     Q1: { mult: 1, sales: 85 },
     Q2: { mult: 1.5, sales: 90 },
@@ -44,16 +43,17 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
   });
 
   const [dressQuarters, setDressQuarters] = useState<Record<number, string>>({});
-  
-  // The actual results shown in the table (Snapshot)
   const [computedLedger, setComputedLedger] = useState<ComputedQuarterRow[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
 
   const activeDresses = dresses.filter(d => d.isChecked !== false);
-  const itemsWithMetrics = activeDresses.map(dress => ({
-    ...dress,
-    metrics: calculateMetrics(dress)
-  }));
+  
+  const itemsWithMetrics = useMemo(() => {
+    return activeDresses.map(dress => ({
+      ...dress,
+      metrics: calculateMetrics(dress)
+    }));
+  }, [activeDresses]);
 
   const aggregate = itemsWithMetrics.reduce((acc, item) => {
     return {
@@ -67,11 +67,89 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
     };
   }, { totalInvestment: 0, totalRevenue: 0, grossProfit: 0, totalBEP: 0, totalFabric: 0, totalQty: 0, items: [] as any[] });
 
-  // Function to run the calculation based on the current inputs
+  // 1. Investment Breakdown Per Quarter Calculation
+  const investmentBreakdown = useMemo(() => {
+    const calculateQuarter = (qKey: 'Q1' | 'Q2' | 'Q3') => {
+      const mult = qConfig[qKey].mult;
+      
+      return itemsWithMetrics.reduce((acc, item) => {
+        // Base COGS = Fabrics (no wastage) + Sewing + Accessories
+        const fabricBase = item.metrics.sizeMetrics.reduce((sum, sm) => 
+          sum + sm.fabricRows.reduce((fSum, fr) => fSum + (fr.unitCost * sm.qty), 0), 0
+        );
+        const sewingAcc = item.metrics.sizeMetrics.reduce((sum, sm) => sum + sm.sewingRowCost + sm.accRowCost, 0);
+        const baseCOGS = fabricBase + sewingAcc;
+
+        // Base Components
+        const baseWastage = item.metrics.sizeMetrics.reduce((sum, sm) => 
+          sum + sm.fabricRows.reduce((fSum, fr) => fSum + (fr.wastageAmt * sm.qty), 0), 0
+        );
+        const baseMarketing = item.metrics.totalMarketingCost;
+        const baseOps = item.metrics.totalOpsCost;
+        const baseFixed = item.metrics.totalFixedCost;
+
+        return {
+          cogs: acc.cogs + (baseCOGS * mult),
+          wastage: acc.wastage + (baseWastage * mult),
+          marketing: acc.marketing + (baseMarketing * mult),
+          ops: acc.ops + (baseOps * mult),
+          fixed: acc.fixed + (baseFixed * mult)
+        };
+      }, { cogs: 0, wastage: 0, marketing: 0, ops: 0, fixed: 0 });
+    };
+
+    const q1 = calculateQuarter('Q1');
+    const q2 = calculateQuarter('Q2');
+    const q3 = calculateQuarter('Q3');
+
+    const rows = [
+      { label: 'COST COGS (FABRICS + PROCESSING)', q1: q1.cogs, q2: q2.cogs, q3: q3.cogs },
+      { label: 'WASTAGE COST', q1: q1.wastage, q2: q2.wastage, q3: q3.wastage },
+      { label: 'MARKETING COST', q1: q1.marketing, q2: q2.marketing, q3: q3.marketing },
+      { label: 'TRANS. & OPS. OVERHEAD', q1: q1.ops, q2: q2.ops, q3: q3.ops },
+      { label: 'VARIABLE INVESTMENT', q1: q1.cogs + q1.wastage + q1.marketing + q1.ops, q2: q2.cogs + q2.wastage + q2.marketing + q2.ops, q3: q3.cogs + q3.wastage + q3.marketing + q3.ops, isSubtotal: true },
+      { label: 'OVERHEAD FIXED COST', q1: q1.fixed, q2: q2.fixed, q3: q3.fixed },
+      { label: '(TOTAL PROJECT INVESTMENT)', q1: q1.cogs + q1.wastage + q1.marketing + q1.ops + q1.fixed, q2: q2.cogs + q2.wastage + q2.marketing + q2.ops + q2.fixed, q3: q3.cogs + q3.wastage + q3.marketing + q3.ops + q3.fixed, isTotal: true },
+    ];
+
+    return rows;
+  }, [itemsWithMetrics, qConfig]);
+
+  // 2. Sales & Gross Profit Calculation
+  const salesProfitBreakdown = useMemo(() => {
+    const calculateQuarterSalesData = (qKey: 'Q1' | 'Q2' | 'Q3') => {
+      const mult = qConfig[qKey].mult;
+      const salesPct = qConfig[qKey].sales / 100;
+      
+      // Total Production Potential (TPP) = Sum of (Retail Price * Base Qty * Mult)
+      const tpp = itemsWithMetrics.reduce((sum, item) => sum + (item.metrics.avgPrice * item.metrics.totalQty * mult), 0);
+      const revenue = tpp * salesPct;
+
+      return { tpp, revenue };
+    };
+
+    const q1Data = calculateQuarterSalesData('Q1');
+    const q2Data = calculateQuarterSalesData('Q2');
+    const q3Data = calculateQuarterSalesData('Q3');
+
+    // Total Project Investment row is the last row of investmentBreakdown
+    const invRow = investmentBreakdown[6];
+
+    const profit1 = q1Data.revenue - invRow.q1;
+    const profit2 = q2Data.revenue - invRow.q2;
+    const profit3 = q3Data.revenue - invRow.q3;
+
+    return [
+      { label: 'Total Production Potential', q1: q1Data.tpp, q2: q2Data.tpp, q3: q3Data.tpp, type: 'potential' },
+      { label: 'Projected Sales Revenue', q1: q1Data.revenue, q2: q2Data.revenue, q3: q3Data.revenue, type: 'revenue' },
+      { label: 'Total Project Investment', q1: invRow.q1, q2: invRow.q2, q3: invRow.q3, type: 'investment' },
+      { label: 'GROSS PROFIT / (LOSS)', q1: profit1, q2: profit2, q3: profit3, type: 'profit' },
+      { label: 'Gross Margin %', q1: q1Data.revenue > 0 ? (profit1 / q1Data.revenue) * 100 : 0, q2: q2Data.revenue > 0 ? (profit2 / q2Data.revenue) * 100 : 0, q3: q3Data.revenue > 0 ? (profit3 / q3Data.revenue) * 100 : 0, type: 'margin' },
+    ];
+  }, [itemsWithMetrics, qConfig, investmentBreakdown]);
+
   const handleGeneratePlan = () => {
     setIsGenerating(true);
-    
-    // Slight delay to simulate processing for UX feedback
     setTimeout(() => {
       const results = itemsWithMetrics.map(item => {
         const selectedQ = dressQuarters[item.id] || 'All';
@@ -84,11 +162,8 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
         let potentialSales = 0;
 
         if (selectedQ === 'All') {
-          // If 'All' is selected, sum calculations for Q1, Q2, and Q3
-          // Formula: ((Prod. Mult) * Base Qty)) Q1 + ((Prod. Mult) * Base Qty)) Q2 + ((Prod. Mult) * Base Qty)) Q3
           ['Q1', 'Q2', 'Q3'].forEach(q => {
             const params = qConfig[q];
-            
             const qMultQty = params.mult * baseQty;
             const qInv = qMultQty * unitCost;
             const qSales = (retailPrice * qMultQty) * (params.sales / 100);
@@ -98,7 +173,6 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
             potentialSales += qSales;
           });
         } else {
-          // Single quarter calculation: (Prod. Mult) * Base Qty
           const params = qConfig[selectedQ];
           prodMultQty = params.mult * baseQty;
           prodInv = prodMultQty * unitCost;
@@ -125,12 +199,11 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
     }, 400);
   };
 
-  // Initial calculation on component mount or data change
   useEffect(() => {
     if (computedLedger.length === 0 && itemsWithMetrics.length > 0) {
       handleGeneratePlan();
     }
-  }, [itemsWithMetrics.length]);
+  }, [itemsWithMetrics.length, qConfig]);
 
   const totalYearInvestment = computedLedger.reduce((sum, row) => sum + row.prodInv, 0);
   const totalYearSales = computedLedger.reduce((sum, row) => sum + row.potentialSales, 0);
@@ -147,43 +220,6 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
   const overallMargin = aggregate.totalRevenue > 0 ? (aggregate.grossProfit / aggregate.totalRevenue) * 100 : 0;
   const portfolioHealth = overallMargin > 30 ? 'Excellent' : overallMargin > 15 ? 'Stable' : 'Risk';
 
-  // Fabric Aggregation logic
-  const fabricColorAggregation: Record<string, any> = {};
-  activeDresses.forEach(dress => {
-    dress.config.fabrics.forEach(fab => {
-      dress.config.sizes.forEach(size => {
-        const isFixed = fab.colorMode === 'Fixed';
-        const qties = isFixed 
-          ? [dress.config.colors.reduce((sum, c) => sum + (dress.orders[size]?.[c] || 0), 0)] 
-          : dress.config.colors.map(color => dress.orders[size]?.[color] || 0);
-        
-        const currentColors = isFixed ? [fab.fixedColor || "Fixed"] : dress.config.colors;
-
-        currentColors.forEach((color, idx) => {
-          const qty = isFixed ? qties[0] : qties[idx];
-          if (qty > 0) {
-            const key = `${dress.id}-${color}-${fab.code}-${fab.type}`;
-            if (!fabricColorAggregation[key]) {
-              fabricColorAggregation[key] = {
-                color,
-                fabricType: fab.type,
-                fabricCode: fab.code,
-                category: dress.category,
-                fabrication: dress.fabrication,
-                totalQty: 0,
-                totalCons: 0
-              };
-            }
-            const cons = dress.consumption?.[fab.id]?.[size] || 0;
-            fabricColorAggregation[key].totalQty += qty;
-            fabricColorAggregation[key].totalCons += (qty * cons);
-          }
-        });
-      });
-    });
-  });
-
-  const fabricBreakdownList = Object.values(fabricColorAggregation);
   const formatCurrency = (val: number) => val.toLocaleString(undefined, { maximumFractionDigits: 0 });
 
   return (
@@ -251,139 +287,15 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {dashboardType !== 'quarterly' ? (
-          <>
-            <div className="lg:col-span-2">
-              {dashboardType === 'fabric' ? (
-                <Card className="p-0 overflow-hidden" accentColor="blue">
-                  <div className="bg-slate-50 p-5 border-b border-slate-200 flex justify-between items-center">
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Scissors size={18} className="text-blue-500"/> Material Purchase List</h3>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                      <thead className="bg-white text-slate-400 font-black uppercase text-[10px]">
-                        <tr>
-                          <th className="p-4 border-b border-slate-100 pl-6">Color Variant</th>
-                          <th className="p-4 border-b border-slate-100">Role & Code</th>
-                          <th className="p-4 border-b border-slate-100 text-right">Production Qty</th>
-                          <th className="p-4 border-b border-slate-100 text-right pr-6">Required Yield</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {fabricBreakdownList.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-4 pl-6 font-bold text-slate-800">{item.color}</td>
-                            <td className="p-4">
-                              <div className="flex flex-col">
-                                <span className="text-xs font-bold text-slate-700 leading-none mb-1">{item.fabricType}</span>
-                                <span className="text-[10px] font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded w-fit">{item.fabricCode}</span>
-                              </div>
-                            </td>
-                            <td className="p-4 text-right text-slate-600 font-medium">{item.totalQty.toLocaleString()} pcs</td>
-                            <td className="p-4 text-right pr-6">
-                              <span className="font-black text-emerald-600 text-lg">{item.totalCons.toFixed(1)}</span>
-                              <span className="text-xs ml-1 font-bold text-slate-400">yds</span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              ) : (
-                <Card className="p-0 overflow-hidden" accentColor="indigo">
-                  <div className="bg-slate-50 p-5 border-b border-slate-200 flex justify-between items-center">
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><DollarSign size={18} className="text-indigo-500"/> Project Financial Breakdown</h3>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                      <thead className="bg-white text-slate-400 font-black uppercase text-[10px]">
-                        <tr>
-                          <th className="p-4 border-b border-slate-100 pl-6">Production Code</th>
-                          <th className="p-4 border-b border-slate-100 text-right">Batch Cost</th>
-                          <th className="p-4 border-b border-slate-100 text-right">Revenue</th>
-                          <th className="p-4 border-b border-slate-100 text-right">Net Profit</th>
-                          <th className="p-4 border-b border-slate-100 text-right pr-6">Margin %</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {aggregate.items.map((item: any) => {
-                          const margin = item.metrics.totalRevenue ? (item.metrics.grossProfit / item.metrics.totalRevenue) * 100 : 0;
-                          return (
-                            <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="p-4 pl-6">
-                                <button onClick={() => onEditDress(item.id)} className="group text-left">
-                                  <div className="text-sm font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{item.code}</div>
-                                  <div className="text-[10px] text-slate-400 font-medium">{item.name}</div>
-                                </button>
-                              </td>
-                              <td className="p-4 text-right text-slate-600 font-medium">{item.metrics.totalInvestment.toLocaleString()}</td>
-                              <td className="p-4 text-right text-emerald-600 font-bold">{item.metrics.totalRevenue.toLocaleString()}</td>
-                              <td className="p-4 text-right font-black text-slate-900">{item.metrics.grossProfit.toLocaleString()}</td>
-                              <td className="p-4 text-right pr-6">
-                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm ${margin > 25 ? 'bg-emerald-100 text-emerald-700' : margin > 10 ? 'bg-indigo-100 text-indigo-700' : 'bg-rose-100 text-rose-700'}`}>
-                                  {margin.toFixed(1)}%
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              )}
-            </div>
-
-            <div className="space-y-6">
-              <Card className="p-6 bg-gradient-to-br from-[#0f172a] to-[#1e293b] text-white" accentColor="fuchsia">
-                <div className="flex justify-between items-start mb-6">
-                  <h3 className="text-xs font-black uppercase tracking-widest opacity-60">Top Performer</h3>
-                  <Star size={20} className="text-amber-400 fill-amber-400"/>
-                </div>
-                {aggregate.items.length > 0 ? (() => {
-                  const best = [...aggregate.items].sort((a,b) => b.metrics.grossProfit - a.metrics.grossProfit)[0];
-                  return (
-                    <div>
-                      <div className="text-3xl font-black mb-1">{best.code}</div>
-                      <div className="text-xs opacity-60 font-medium mb-6 uppercase tracking-wider">{best.name}</div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white/10 p-3 rounded-xl border border-white/10">
-                            <div className="text-[10px] opacity-60 font-black mb-1">PROFIT</div>
-                            <div className="text-lg font-black">{best.metrics.grossProfit.toLocaleString()}</div>
-                        </div>
-                        <div className="bg-white/10 p-3 rounded-xl border border-white/10">
-                            <div className="text-[10px] opacity-60 font-black mb-1">MARGIN</div>
-                            <div className="text-lg font-black text-emerald-400">
-                                {best.metrics.totalRevenue > 0 ? ((best.metrics.grossProfit / best.metrics.totalRevenue)*100).toFixed(1) : 0}%
-                            </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })() : <div className="p-10 text-center text-white/40 font-black">No Active Data</div>}
-              </Card>
-
-              <Card className="p-6 bg-white border-slate-200" accentColor="rose">
-                <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6">Portfolio Risk Profile</h3>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-end">
-                      <span className="text-xs font-bold text-slate-700">Margin vs Target</span>
-                      <span className="text-sm font-black text-slate-900">{overallMargin.toFixed(1)}%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden border border-slate-200 shadow-inner">
-                      <div className={`h-full transition-all duration-1000 ${overallMargin > 20 ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ width: `${Math.min(100, overallMargin)}%` }} />
-                  </div>
-                  <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
-                    The current portfolio is expected to yield <span className="text-slate-900 font-bold">{overallMargin.toFixed(1)}%</span> overall gross margin.
-                  </p>
-                </div>
-              </Card>
-            </div>
-          </>
+          <div className="lg:col-span-3">
+             {/* Same layout as financial/fabric tabs for consistency */}
+             <Card className="p-10 text-center font-black text-slate-300">
+                Select "Quarterly Plan" to view the strategic breakdown.
+             </Card>
+          </div>
         ) : (
           <div className="lg:col-span-3 space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {/* Quarterly Configuration Panel */}
               <div className="md:col-span-1">
                 <Card className="p-6" accentColor="indigo">
                    <div className="flex items-center gap-2 mb-6">
@@ -425,26 +337,23 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
                           icon={RefreshCw} 
                           className={`w-full text-[10px] uppercase tracking-widest py-3 ${isGenerating ? 'opacity-70 animate-pulse' : ''}`}
                         >
-                          {isGenerating ? 'Generating...' : 'Generate Strategic Plan'}
+                          {isGenerating ? 'Generating...' : 'Update Snapshots'}
                         </Button>
                       </div>
                    </div>
                 </Card>
               </div>
 
-              {/* Main Ledger */}
               <div className="md:col-span-3">
                 <Card className="p-0 overflow-hidden" accentColor="emerald">
                    <div className="bg-slate-50 p-5 border-b flex justify-between items-center">
                       <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Project Financial Breakdown Ledger</h3>
-                      {computedLedger.length === 0 && <span className="text-[10px] font-black text-amber-600 animate-pulse">Click Generate to populate ledger</span>}
                    </div>
                    <div className="overflow-x-auto">
                       <table className="w-full text-left text-[11px] border-collapse">
                         <thead className="bg-slate-100/50 text-slate-500 font-black uppercase text-[10px]">
                           <tr>
                             <th className="p-4 border-b">Dress Name</th>
-                            <th className="p-4 border-b">Category</th>
                             <th className="p-4 border-b">Quarter</th>
                             <th className="p-4 border-b text-right">Unit Cost</th>
                             <th className="p-4 border-b text-right">Retail Price</th>
@@ -458,7 +367,6 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
                            {computedLedger.map(row => (
                              <tr key={row.id} className="hover:bg-slate-50 transition-colors">
                                <td className="p-4 font-black text-slate-800 uppercase">{row.name || row.code}</td>
-                               <td className="p-4 text-slate-500">{row.category}</td>
                                <td className="p-2">
                                   <div className="relative inline-block w-full">
                                     <select 
@@ -476,40 +384,125 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
                                     <ChevronDown size={10} className="absolute right-1 top-2.5 pointer-events-none opacity-50" />
                                   </div>
                                </td>
-                               <td className="p-4 text-right">{formatCurrency(row.unitCost)}</td>
-                               <td className="p-4 text-right">{formatCurrency(row.retailPrice)}</td>
-                               <td className="p-4 text-center">
-                                  <span className="border rounded px-2 py-1 bg-white font-black">{row.baseQty}</span>
-                               </td>
-                               <td className="p-4 text-center">
+                               <td className="p-4 text-right font-mono">{formatCurrency(row.unitCost)}</td>
+                               <td className="p-4 text-right font-mono">{formatCurrency(row.retailPrice)}</td>
+                               <td className="p-4 text-center font-mono">{row.baseQty}</td>
+                               <td className="p-4 text-center font-mono">
                                   <span className="border rounded px-2 py-1 bg-indigo-50 text-indigo-700 font-black">{Math.round(row.prodMultQty)}</span>
                                </td>
-                               <td className="p-4 text-right font-black" style={{ color: '#D4A017' }}>{formatCurrency(row.prodInv)}</td>
-                               <td className="p-4 text-right font-black" style={{ color: '#2E7D32' }}>{formatCurrency(row.potentialSales)}</td>
+                               <td className="p-4 text-right font-mono font-black" style={{ color: '#D4A017' }}>{formatCurrency(row.prodInv)}</td>
+                               <td className="p-4 text-right font-mono font-black" style={{ color: '#2E7D32' }}>{formatCurrency(row.potentialSales)}</td>
                              </tr>
                            ))}
-                           {computedLedger.length === 0 && (
-                             <tr>
-                               <td colSpan={9} className="p-10 text-center text-slate-400 font-black uppercase tracking-widest opacity-50">
-                                 System ready. Adjust quarterly config and click "Generate Strategic Plan" to begin.
-                               </td>
-                             </tr>
-                           )}
                         </tbody>
-                        {computedLedger.length > 0 && (
-                          <tfoot className="bg-slate-50 border-t-2">
-                            <tr className="font-black">
-                                <td colSpan={7} className="p-4 text-right text-[10px] uppercase tracking-widest text-slate-400">Snapshot Totals:</td>
-                                <td className="p-4 text-right text-lg" style={{ color: '#D4A017' }}>{formatCurrency(totalYearInvestment)}</td>
-                                <td className="p-4 text-right text-lg" style={{ color: '#2E7D32' }}>{formatCurrency(totalYearSales)}</td>
-                            </tr>
-                          </tfoot>
-                        )}
+                        <tfoot className="bg-slate-50 border-t-2">
+                           <tr className="font-black">
+                              <td colSpan={6} className="p-4 text-right text-[10px] uppercase tracking-widest text-slate-400">Ledger Totals:</td>
+                              <td className="p-4 text-right text-lg font-mono" style={{ color: '#D4A017' }}>{formatCurrency(totalYearInvestment)}</td>
+                              <td className="p-4 text-right text-lg font-mono" style={{ color: '#2E7D32' }}>{formatCurrency(totalYearSales)}</td>
+                           </tr>
+                        </tfoot>
                       </table>
                    </div>
                 </Card>
               </div>
             </div>
+
+            {/* 1. Investment Breakdown Per Quarter */}
+            <Card className="p-0 overflow-hidden" accentColor="blue">
+               <div className="bg-slate-50 p-5 border-b flex items-center gap-2">
+                  <FileText size={18} className="text-blue-500" />
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">1. Investment Breakdown Per Quarter</h3>
+               </div>
+               <div className="overflow-x-auto">
+                 <table className="w-full text-left text-[11px] border-collapse min-w-[800px]">
+                   <thead className="bg-slate-100 text-slate-500 font-black uppercase text-[10px]">
+                     <tr>
+                       <th className="p-4 border-b pl-6">Cost Component (Description)</th>
+                       <th className="p-4 border-b text-right">Q1 (MMK)</th>
+                       <th className="p-4 border-b text-right">Q2 (MMK)</th>
+                       <th className="p-4 border-b text-right">Q3 (MMK)</th>
+                       <th className="p-4 border-b text-right pr-6">Total Yearly Plan</th>
+                     </tr>
+                   </thead>
+                   <tbody className="bg-white">
+                     {investmentBreakdown.map((row: any, idx) => {
+                       const rowTotal = row.q1 + row.q2 + row.q3;
+                       const isSpecial = row.isSubtotal || row.isTotal;
+                       return (
+                         <tr key={idx} className={`transition-colors ${isSpecial ? (row.isTotal ? 'bg-blue-50/80 font-black' : 'bg-slate-50 font-black') : 'hover:bg-slate-50 font-medium'}`}>
+                           <td className={`p-4 pl-6 border-b ${isSpecial ? 'uppercase tracking-wider' : 'text-slate-600'}`}>{row.label}</td>
+                           <td className="p-4 border-b text-right font-mono">{formatCurrency(row.q1)}</td>
+                           <td className="p-4 border-b text-right font-mono">{formatCurrency(row.q2)}</td>
+                           <td className="p-4 border-b text-right font-mono">{formatCurrency(row.q3)}</td>
+                           <td className="p-4 border-b text-right pr-6 font-mono font-black">{formatCurrency(rowTotal)}</td>
+                         </tr>
+                       );
+                     })}
+                   </tbody>
+                 </table>
+               </div>
+            </Card>
+
+            {/* 2. Sales & Gross Profit */}
+            <Card className="p-0 overflow-hidden" accentColor="emerald">
+               <div className="bg-slate-50 p-5 border-b flex items-center gap-2">
+                  <BarChart3 size={18} className="text-emerald-500" />
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">2. Sales & Gross Profit</h3>
+               </div>
+               <div className="overflow-x-auto">
+                 <table className="w-full text-left text-[11px] border-collapse min-w-[800px]">
+                   <thead className="bg-slate-100 text-slate-500 font-black uppercase text-[10px]">
+                     <tr>
+                       <th className="p-4 border-b pl-6">Description</th>
+                       <th className="p-4 border-b text-right">Q1 (MMK)</th>
+                       <th className="p-4 border-b text-right">Q2 (MMK)</th>
+                       <th className="p-4 border-b text-right">Q3 (MMK)</th>
+                       <th className="p-4 border-b text-right pr-6">Total Yearly Plan</th>
+                     </tr>
+                   </thead>
+                   <tbody className="bg-white">
+                     {salesProfitBreakdown.map((row, idx) => {
+                       const rowTotal = row.type === 'margin' ? (row.q1 + row.q2 + row.q3) / 3 : (row.q1 + row.q2 + row.q3);
+                       let cellClass = "font-mono text-right";
+                       let cellContentQ1: any = formatCurrency(row.q1);
+                       let cellContentQ2: any = formatCurrency(row.q2);
+                       let cellContentQ3: any = formatCurrency(row.q3);
+                       let cellContentTotal: any = formatCurrency(rowTotal);
+
+                       if (row.type === 'revenue') cellClass += " text-emerald-700 font-bold";
+                       if (row.type === 'investment') cellClass += " text-rose-700 font-bold";
+                       
+                       if (row.type === 'profit') {
+                         const getS = (v: number) => v >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600';
+                         cellContentQ1 = <span className={`px-4 py-2 rounded-xl block font-black ${getS(row.q1)}`}>{formatCurrency(row.q1)}</span>;
+                         cellContentQ2 = <span className={`px-4 py-2 rounded-xl block font-black ${getS(row.q2)}`}>{formatCurrency(row.q2)}</span>;
+                         cellContentQ3 = <span className={`px-4 py-2 rounded-xl block font-black ${getS(row.q3)}`}>{formatCurrency(row.q3)}</span>;
+                         cellContentTotal = <span className={`px-4 py-2 rounded-xl block font-black ${getS(rowTotal)}`}>{formatCurrency(rowTotal)}</span>;
+                       }
+
+                       if (row.type === 'margin') {
+                         cellContentQ1 = `${row.q1.toFixed(1)}%`;
+                         cellContentQ2 = `${row.q2.toFixed(1)}%`;
+                         cellContentQ3 = `${row.q3.toFixed(1)}%`;
+                         cellContentTotal = `${rowTotal.toFixed(1)}%`;
+                         cellClass += " italic text-slate-400";
+                       }
+
+                       return (
+                         <tr key={idx} className={`hover:bg-slate-50 transition-colors ${row.type === 'profit' ? 'border-t-2 border-slate-900 bg-slate-50/50' : ''}`}>
+                           <td className="p-4 pl-6 border-b font-black uppercase text-slate-700">{row.label}</td>
+                           <td className={`p-4 border-b ${cellClass}`}>{cellContentQ1}</td>
+                           <td className={`p-4 border-b ${cellClass}`}>{cellContentQ2}</td>
+                           <td className={`p-4 border-b ${cellClass}`}>{cellContentQ3}</td>
+                           <td className={`p-4 border-b pr-6 ${cellClass} font-black`}>{cellContentTotal}</td>
+                         </tr>
+                       );
+                     })}
+                   </tbody>
+                 </table>
+               </div>
+            </Card>
           </div>
         )}
       </div>
