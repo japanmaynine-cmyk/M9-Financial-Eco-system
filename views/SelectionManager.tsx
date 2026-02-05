@@ -3,7 +3,7 @@ import {
   Settings, Scissors, DollarSign, PieChart, CheckCircle, 
   Trash2, Plus, RefreshCw, FileText, List, TrendingUp, Activity,
   ChevronDown, ChevronUp, Loader2, Target, BarChart3,
-  CheckSquare, Square, ChevronRight
+  CheckSquare, Square, ChevronRight, Tag
 } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Bar, Line
@@ -298,11 +298,17 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
   const renderTab2 = () => {
     // Logic for summary calculations (TFoot)
     const totalFabricBaseCost = metrics.sizeMetrics.reduce((sum, m) => 
-      sum + m.fabricRows.reduce((fSum, fr) => fSum + (fr.unitCost * m.qty), 0), 0
+      sum + m.fabricRows.reduce((fSum, fSumVal, frIndex) => {
+        const fr = m.fabricRows[frIndex];
+        return fSum + (fr.unitCost * m.qty);
+      }, 0), 0
     );
     const totalSewingAccCost = metrics.sizeMetrics.reduce((sum, m) => sum + m.sewingRowCost + m.accRowCost, 0);
     const totalWastageCost = metrics.sizeMetrics.reduce((sum, m) => 
-      sum + m.fabricRows.reduce((fSum, fr) => fSum + (fr.wastageAmt * m.qty), 0), 0
+      sum + m.fabricRows.reduce((fSum, fSumVal, frIndex) => {
+        const fr = m.fabricRows[frIndex];
+        return fSum + (fr.wastageAmt * m.qty);
+      }, 0), 0
     );
 
     return (
@@ -355,7 +361,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                    {metrics.sizeMetrics.map((m) => {
-                     // Calculate COD (Cost of Goods) for this size excluding wastage/overheads
                      const sizeCodTotal = (m.fabricRows.reduce((acc, fr) => acc + fr.unitCost, 0) + dress.costs.sewingCost + dress.costs.accessoriesCost) * m.qty;
                      
                      return (
@@ -368,7 +373,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                               <td className="p-4 text-right font-medium">{formatCurrency(fr.refPrice)}</td>
                               <td className="p-4 text-right font-medium">{formatCurrency(fr.unitCost)}</td>
                               <td className="p-4 text-center font-black">{m.qty}</td>
-                              {/* Show Base Total Cost without wastage in row breakdown */}
                               <td className="p-4 text-right font-black text-slate-900 pr-6">{formatCurrency(fr.unitCost * m.qty)}</td>
                            </tr>
                          ))}
@@ -453,6 +457,7 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                   <th className="p-4 border-b border-slate-200 text-right">Var Cost</th>
                   <th className="p-4 border-b border-slate-200 text-center">% Profit</th>
                   <th className="p-4 border-b border-slate-200 text-right">Profit Amt</th>
+                  <th className="p-4 border-b border-slate-200 text-right">Sales Margin</th>
                   <th className="p-4 border-b border-slate-200 text-right">Retail Price (Editable)</th>
                   <th className="p-4 border-b border-slate-200 text-center">Qty</th>
                   <th className="p-4 border-b border-slate-200 text-right pr-6">Total Sales</th>
@@ -465,6 +470,7 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                     <td className="p-4 text-right font-medium">{formatCurrency(m.varUnitCost)}</td>
                     <td className="p-4 text-center font-bold text-slate-400">{dress.costs.profitTargetPct}%</td>
                     <td className="p-4 text-right font-bold text-green-600">{formatCurrency(m.profitAmt)}</td>
+                    <td className="p-4 text-right font-bold text-indigo-600">{formatCurrency(m.calcPrice)}</td>
                     <td className="p-2">
                       <input 
                         type="number" 
@@ -485,7 +491,7 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
               </tbody>
               <tfoot className="bg-slate-900 text-white">
                 <tr className="font-black">
-                  <td colSpan={6} className="p-6 text-right uppercase text-xs tracking-[0.2em] italic">Total Portfolio Revenue:</td>
+                  <td colSpan={7} className="p-6 text-right uppercase text-xs tracking-[0.2em] italic">Total Portfolio Revenue:</td>
                   <td className="p-6 text-right text-emerald-400 pr-6 text-2xl tracking-tighter">
                     {formatCurrency(metrics.totalRevenue)} <span className="text-[10px] uppercase opacity-40">MMK</span>
                   </td>
@@ -517,8 +523,120 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
       { name: 'This Product', investment: metrics.totalInvestment, revenue: metrics.totalRevenue, bepLevel: ber }
     ];
 
+    // Functional Calculation Helper
+    const calcPriceData = (price: number, cog: number) => {
+      const marginVal = price - cog;
+      const marginPct = price > 0 ? (marginVal / price) * 100 : 0;
+      return { marginVal, marginPct };
+    };
+
     return (
-      <div className="space-y-6 animate-fadeIn pb-10">
+      <div className="space-y-8 animate-fadeIn pb-10">
+        {/* NEW SECTION: Sales Pricing Analysis Component */}
+        <Card className="p-0 overflow-hidden" accentColor="indigo">
+          <div className="p-6 bg-white border-b flex items-center justify-between">
+            <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-800 flex items-center gap-2">
+              <Tag size={18} className="text-indigo-500" /> Sales Pricing Analysis
+            </h3>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border rounded-xl text-[9px] font-black text-slate-400 uppercase tracking-widest">
+              Financial Modeling Unit
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11px] border-collapse min-w-[900px]">
+              <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-tighter">
+                <tr className="border-b">
+                  <th className="p-4 pl-6 border-r border-slate-200 w-16" rowSpan={2}>SIZE</th>
+                  <th className="p-4 border-b border-r border-slate-200 text-center" colSpan={3}>RETAIL</th>
+                  <th className="p-4 border-b border-r border-slate-200 text-center" colSpan={3}>WHOLESALE</th>
+                  <th className="p-4 border-b text-center" colSpan={3}>FLASH SALES/PROMO</th>
+                </tr>
+                <tr className="border-b">
+                  {/* Retail Headers */}
+                  <th className="p-2 border-r border-slate-100 text-center bg-indigo-50/30">Price</th>
+                  <th className="p-2 border-r border-slate-100 text-center bg-indigo-50/30">Margin</th>
+                  <th className="p-2 border-r border-slate-200 text-center bg-indigo-50/30">%</th>
+                  {/* Wholesale Headers */}
+                  <th className="p-2 border-r border-slate-100 text-center bg-cyan-50/30">Price</th>
+                  <th className="p-2 border-r border-slate-100 text-center bg-cyan-50/30">Margin</th>
+                  <th className="p-2 border-r border-slate-200 text-center bg-cyan-50/30">%</th>
+                  {/* Flash Headers */}
+                  <th className="p-2 border-r border-slate-100 text-center bg-amber-50/30">Price</th>
+                  <th className="p-2 border-r border-slate-100 text-center bg-amber-50/30">Margin</th>
+                  <th className="p-2 text-center bg-amber-50/30">%</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+                {metrics.sizeMetrics.map(m => {
+                  const cog = m.varUnitCost;
+                  const retailPrice = m.retailPrice;
+                  const wsPrice = dress.salesPrices[m.size]?.ws || 0;
+                  const flashPrice = dress.salesPrices[m.size]?.flash || 0;
+
+                  const retail = calcPriceData(retailPrice, cog);
+                  const ws = calcPriceData(wsPrice, cog);
+                  const flash = calcPriceData(flashPrice, cog);
+
+                  const getMarginColor = (val: number) => val < 0 ? 'text-rose-500 font-black' : 'text-emerald-500 font-black';
+
+                  return (
+                    <tr key={m.size} className="border-b hover:bg-slate-50 transition-colors">
+                      <td className="p-4 pl-6 border-r border-slate-200 font-black text-slate-800 bg-slate-50/20">{m.size}</td>
+                      
+                      {/* Retail Section (Read-Only) */}
+                      <td className="p-2 text-center font-bold text-slate-700 border-r border-slate-100 bg-indigo-50/10">{formatCurrency(retailPrice)}</td>
+                      <td className={`p-2 text-center border-r border-slate-100 bg-indigo-50/10 ${getMarginColor(retail.marginVal)}`}>{formatCurrency(retail.marginVal)}</td>
+                      <td className={`p-2 text-center border-r border-slate-200 bg-indigo-50/10 ${getMarginColor(retail.marginVal)}`}>{retail.marginPct.toFixed(1)}%</td>
+
+                      {/* Wholesale Section (Editable) */}
+                      <td className="p-1 border-r border-slate-100 bg-cyan-50/10">
+                        <input 
+                          type="number" 
+                          className="w-full h-8 text-center bg-white border border-slate-200 rounded-md font-black outline-none focus:ring-2 focus:ring-cyan-500" 
+                          value={wsPrice} 
+                          onChange={e => {
+                            const next = {...dress.salesPrices};
+                            if (!next[m.size]) next[m.size] = { retail: 0, ws: 0 };
+                            next[m.size].ws = parseFloat(e.target.value) || 0;
+                            updateDress(dress.id, 'salesPrices', next);
+                          }} 
+                        />
+                      </td>
+                      <td className={`p-2 text-center border-r border-slate-100 bg-cyan-50/10 ${getMarginColor(ws.marginVal)}`}>{formatCurrency(ws.marginVal)}</td>
+                      <td className={`p-2 text-center border-r border-slate-200 bg-cyan-50/10 ${getMarginColor(ws.marginVal)}`}>{ws.marginPct.toFixed(1)}%</td>
+
+                      {/* Flash Sales Section (Editable) */}
+                      <td className="p-1 border-r border-slate-100 bg-amber-50/10">
+                        <input 
+                          type="number" 
+                          className="w-full h-8 text-center bg-white border border-slate-200 rounded-md font-black outline-none focus:ring-2 focus:ring-amber-500" 
+                          value={flashPrice} 
+                          onChange={e => {
+                            const next = {...dress.salesPrices};
+                            if (!next[m.size]) next[m.size] = { retail: 0, ws: 0 };
+                            next[m.size].flash = parseFloat(e.target.value) || 0;
+                            updateDress(dress.id, 'salesPrices', next);
+                          }} 
+                        />
+                      </td>
+                      <td className={`p-2 text-center border-r border-slate-100 bg-amber-50/10 ${getMarginColor(flash.marginVal)}`}>{formatCurrency(flash.marginVal)}</td>
+                      <td className={`p-2 text-center bg-amber-50/10 ${getMarginColor(flash.marginVal)}`}>{flash.marginPct.toFixed(1)}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="p-4 bg-slate-50 border-t flex items-center justify-center gap-6">
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Formula: Margin = Price - CoG
+            </div>
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Margin % = (Margin / Price) × 100
+            </div>
+          </div>
+        </Card>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
            <Card className="p-0 overflow-hidden" accentColor="rose">
               <div className="bg-slate-50 p-5 border-b flex items-center gap-2">
