@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Scissors, Shirt, Activity, Settings, DollarSign, TrendingUp, PieChart, Star, ShieldCheck, Calendar, ChevronDown, RefreshCw, FileText, BarChart3, Target, CheckCircle2
+  Scissors, Shirt, Activity, Settings, DollarSign, TrendingUp, PieChart, Star, ShieldCheck, Calendar, ChevronDown, RefreshCw, FileText, BarChart3, Target, CheckCircle2, Layers, Tag
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ComposedChart, Line
@@ -56,6 +56,64 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
       metrics: calculateMetrics(dress)
     }));
   }, [activeDresses]);
+
+  // --- FABRIC VIEW AGGREGATIONS (TABLE A & B) ---
+  
+  const fabricColorSummary = useMemo(() => {
+    const summary: Record<string, { color: string; code: string; types: Set<string>; estYds: number }> = {};
+    
+    activeDresses.forEach(dress => {
+      dress.config.fabrics.forEach(fab => {
+        const calculateYds = (targetColor: string) => {
+          let yards = 0;
+          dress.config.sizes.forEach(size => {
+            const qty = dress.orders[size]?.[targetColor] || 0;
+            const consumption = dress.consumption[fab.id]?.[size] || 0;
+            yards += qty * consumption;
+          });
+          return yards;
+        };
+
+        if (fab.colorMode === 'Matched') {
+          dress.config.colors.forEach(color => {
+            const key = `${color}-${fab.code}`;
+            if (!summary[key]) {
+              summary[key] = { color, code: fab.code, types: new Set(), estYds: 0 };
+            }
+            summary[key].estYds += calculateYds(color);
+            summary[key].types.add(fab.type);
+          });
+        } else if (fab.colorMode === 'Fixed' && fab.fixedColor) {
+          const key = `${fab.fixedColor}-${fab.code}`;
+          if (!summary[key]) {
+            summary[key] = { color: fab.fixedColor, code: fab.code, types: new Set(), estYds: 0 };
+          }
+          summary[key].estYds += calculateYds(fab.fixedColor);
+          summary[key].types.add(fab.type);
+        }
+      });
+    });
+
+    return Object.values(summary).sort((a, b) => b.estYds - a.estYds);
+  }, [activeDresses]);
+
+  const dressBreakdownTable = useMemo(() => {
+    return itemsWithMetrics.map(item => ({
+      id: item.id,
+      code: item.code,
+      name: item.name,
+      category: item.category,
+      qty: item.metrics.totalQty,
+      fabricCodes: Array.from(new Set(item.config.fabrics.map(f => f.code))),
+      estYds: item.metrics.totalFabricYards
+    })).sort((a, b) => b.estYds - a.estYds);
+  }, [itemsWithMetrics]);
+
+  // Aggregate Metrics for Top Cards
+  const totalFabricReq = itemsWithMetrics.reduce((sum, item) => sum + item.metrics.totalFabricYards, 0);
+  const totalProduction = itemsWithMetrics.reduce((sum, item) => sum + item.metrics.totalQty, 0);
+  const avgConsPerUnit = totalProduction > 0 ? totalFabricReq / totalProduction : 0;
+  const uniqueFabricCodesCount = new Set(activeDresses.flatMap(d => d.config.fabrics.map(f => f.code))).size;
 
   const aggregate = itemsWithMetrics.reduce((acc, item) => {
     return {
@@ -191,7 +249,6 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
     ];
   }, [investmentBreakdown, salesProfitBreakdown, breakEvenBreakdown]);
 
-  // Aggregate Yearly Totals for KPIs from the Breakdown Sections
   const quarterlyKPIs = useMemo(() => {
     const invRow = investmentBreakdown[6];
     const revRow = salesProfitBreakdown[1];
@@ -307,10 +364,10 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {dashboardType === 'fabric' && (
           <>
-            <KpiCard title="Project Material Req" value={aggregate.totalFabric.toLocaleString(undefined, { maximumFractionDigits: 1 })} unit="yds" icon={Scissors} color="blue" />
-            <KpiCard title="Total Batch Units" value={aggregate.totalQty.toLocaleString()} unit="pcs" icon={Shirt} color="indigo" />
-            <KpiCard title="Efficiency (yds/unit)" value={aggregate.totalQty ? (aggregate.totalFabric / aggregate.totalQty).toFixed(2) : 0} unit="yds" icon={Activity} color="emerald" />
-            <KpiCard title="Active Materials" value={new Set(dresses.flatMap(d => d.config.fabrics.map(f => f.code))).size} unit="SKUs" icon={Settings} color="amber" />
+            <KpiCard title="Total Fabric Req" value={totalFabricReq.toLocaleString(undefined, { maximumFractionDigits: 1 })} unit="yds" icon={Scissors} color="blue" />
+            <KpiCard title="Total Production" value={totalProduction.toLocaleString()} unit="pcs" icon={Shirt} color="indigo" />
+            <KpiCard title="Avg Cons/Unit" value={avgConsPerUnit.toFixed(2)} unit="yds" icon={Activity} color="emerald" />
+            <KpiCard title="Fabric Types" value={uniqueFabricCodesCount} unit="SKUs" icon={Settings} color="amber" />
           </>
         )}
         {dashboardType === 'financial' && (
@@ -332,14 +389,143 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {dashboardType !== 'quarterly' ? (
-          <div className="lg:col-span-3">
-             <Card className="p-10 text-center font-black text-slate-300">
-                Select "Quarterly Plan" to view the strategic breakdown.
-             </Card>
+        {dashboardType === 'fabric' ? (
+          <div className="lg:col-span-3 space-y-8 animate-fadeIn">
+            {/* Table A: Production Breakdown by Fabric Color */}
+            <Card className="p-0 overflow-hidden" accentColor="blue">
+              <div className="bg-slate-50 p-5 border-b border-slate-200 flex justify-between items-center">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                  <Layers size={18} className="text-blue-500"/> Table A: Production Breakdown by Fabric Color
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-white text-slate-400 font-black uppercase text-[10px]">
+                    <tr>
+                      <th className="p-4 border-b border-slate-100 pl-6">Color</th>
+                      <th className="p-4 border-b border-slate-100">Fabric Type</th>
+                      <th className="p-4 border-b border-slate-100">Fabric Code</th>
+                      <th className="p-4 border-b border-slate-100 text-right pr-6">Est. Yds</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {fabricColorSummary.map((row, idx) => (
+                      <tr key={`${idx}-${row.code}`} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-4 pl-6 font-bold flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full border border-slate-200" style={{ backgroundColor: row.color.toLowerCase() }}></span>
+                          <span className="bg-slate-100 px-2 py-1 rounded text-[10px] uppercase font-black">{row.color}</span>
+                        </td>
+                        <td className="p-4 text-slate-500 font-medium">{Array.from(row.types).join(', ')}</td>
+                        <td className="p-4 font-mono font-bold text-slate-700">{row.code}</td>
+                        <td className="p-4 text-right pr-6 font-black text-blue-600 text-base">
+                          {row.estYds.toFixed(2)} <span className="text-[10px] font-medium opacity-50">yds</span>
+                        </td>
+                      </tr>
+                    ))}
+                    {fabricColorSummary.length === 0 && (
+                      <tr><td colSpan={4} className="p-10 text-center text-slate-400 font-black italic">No fabric consumption data found for selected products.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            {/* Table B: Breakdown by Dress Code */}
+            <Card className="p-0 overflow-hidden" accentColor="indigo">
+              <div className="bg-slate-50 p-5 border-b border-slate-200 flex justify-between items-center">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                  <Shirt size={18} className="text-indigo-500"/> Table B: Breakdown by Dress Code
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-white text-slate-400 font-black uppercase text-[10px]">
+                    <tr>
+                      <th className="p-4 border-b border-slate-100 pl-6">Dress Code</th>
+                      <th className="p-4 border-b border-slate-100">Category</th>
+                      <th className="p-4 border-b border-slate-100 text-center">Qty (PCS)</th>
+                      <th className="p-4 border-b border-slate-100">Fabrication</th>
+                      <th className="p-4 border-b border-slate-100 text-right pr-6">Est. Yds</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {dressBreakdownTable.map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-4 pl-6">
+                           <button onClick={() => onEditDress(row.id)} className="text-left group">
+                              <div className="text-sm font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{row.code}</div>
+                              <div className="text-[10px] text-slate-400 font-medium uppercase">{row.name}</div>
+                           </button>
+                        </td>
+                        <td className="p-4 text-slate-500 font-medium text-xs">{row.category}</td>
+                        <td className="p-4 text-center font-black text-slate-900">{row.qty.toLocaleString()}</td>
+                        <td className="p-4">
+                           <div className="flex flex-wrap gap-1">
+                              {row.fabricCodes.map(code => (
+                                <span key={code} className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[9px] font-black border border-indigo-100">{code}</span>
+                              ))}
+                           </div>
+                        </td>
+                        <td className="p-4 text-right pr-6 font-black text-indigo-600 text-base">
+                          {row.estYds.toFixed(2)} <span className="text-[10px] font-medium opacity-50">yds</span>
+                        </td>
+                      </tr>
+                    ))}
+                    {dressBreakdownTable.length === 0 && (
+                      <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-black italic">No active production lines selected.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        ) : dashboardType === 'financial' ? (
+          <div className="lg:col-span-3 animate-fadeIn">
+            <Card className="p-0 overflow-hidden" accentColor="indigo">
+              <div className="bg-slate-50 p-5 border-b border-slate-200 flex justify-between items-center">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><DollarSign size={18} className="text-indigo-500"/> Project Financial Breakdown</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-white text-slate-400 font-black uppercase text-[10px]">
+                    <tr>
+                      <th className="p-4 border-b border-slate-100 pl-6">Production Code</th>
+                      <th className="p-4 border-b border-slate-100 text-right">Batch Cost</th>
+                      <th className="p-4 border-b border-slate-100 text-right">Revenue</th>
+                      <th className="p-4 border-b border-slate-100 text-right">Net Profit</th>
+                      <th className="p-4 border-b border-slate-100 text-right pr-6">Margin %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {aggregate.items.map((item: any) => {
+                      const margin = item.metrics.totalRevenue ? (item.metrics.grossProfit / item.metrics.totalRevenue) * 100 : 0;
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-4 pl-6">
+                            <button onClick={() => onEditDress(item.id)} className="group text-left">
+                              <div className="text-sm font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{item.code}</div>
+                              <div className="text-[10px] text-slate-400 font-medium">{item.name}</div>
+                            </button>
+                          </td>
+                          <td className="p-4 text-right text-slate-600 font-medium">{item.metrics.totalInvestment.toLocaleString()}</td>
+                          <td className="p-4 text-right text-emerald-600 font-bold">{item.metrics.totalRevenue.toLocaleString()}</td>
+                          <td className="p-4 text-right font-black text-slate-900">{item.metrics.grossProfit.toLocaleString()}</td>
+                          <td className="p-4 text-right pr-6">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm ${margin > 25 ? 'bg-emerald-100 text-emerald-700' : margin > 10 ? 'bg-indigo-100 text-indigo-700' : 'bg-rose-100 text-rose-700'}`}>
+                              {margin.toFixed(1)}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
           </div>
         ) : (
-          <div className="lg:col-span-3 space-y-8">
+          <div className="lg:col-span-3 space-y-8 animate-fadeIn">
+            {/* Quarterly Planning UI */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="md:col-span-1">
                 <Card className="p-6" accentColor="indigo">
