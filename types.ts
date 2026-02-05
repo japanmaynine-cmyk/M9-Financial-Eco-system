@@ -6,6 +6,7 @@ export interface Fabric {
   color: string;
   price: number;
   colorMode: 'Matched' | 'Fixed';
+  fixedColor?: string;
 }
 
 export interface SalesPrice {

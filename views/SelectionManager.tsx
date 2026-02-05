@@ -3,12 +3,13 @@ import React, { useState } from 'react';
 import { 
   Settings, Scissors, DollarSign, PieChart, CheckCircle, 
   Trash2, Plus, Download, RefreshCw, FileText, List, TrendingUp, Activity,
-  ChevronRight, AlertCircle, ChevronDown, ChevronUp
+  ChevronRight, AlertCircle, ChevronDown, ChevronUp, CheckSquare, Square,
+  Loader2
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine 
 } from 'recharts';
-import { Dress } from '../types';
+import { Dress, Fabric } from '../types';
 import { Card, Button, Input } from '../components';
 import { calculateMetrics } from '../logic';
 
@@ -16,10 +17,12 @@ interface SelectionManagerProps {
   dress: Dress;
   updateDress: (id: number, field: string | object, value?: any) => void;
   onBack: () => void;
+  onDelete: (id: number) => void;
+  isSyncing?: boolean;
 }
 
-const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress, onBack }) => {
-  const [activeTab, setActiveTab] = useState<0 | 1 | 2 | 3>(3); // Initializing to Tab 3 for request
+const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress, onBack, onDelete, isSyncing = false }) => {
+  const [activeTab, setActiveTab] = useState<0 | 1 | 2 | 3>(0); 
   const [notification, setNotification] = useState<string | null>(null);
   const [isConfigExpanded, setIsConfigExpanded] = useState(true);
   
@@ -37,7 +40,7 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
   // Tab 0 State
   const [newSize, setNewSize] = useState("");
   const [newColor, setNewColor] = useState("");
-  const [newFabric, setNewFabric] = useState({ type: "", fab: "", color: "", price: "" });
+  const [newFabric, setNewFabric] = useState({ type: "", fab: "", price: "" });
 
   const addSize = () => {
     if(newSize && !dress.config.sizes.includes(newSize)) {
@@ -61,13 +64,29 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
           id: Date.now(), 
           type: newFabric.type,
           code: newFabric.fab,
-          color: newFabric.color,
+          color: "N/A", 
           price: parseFloat(newFabric.price) || 0,
           colorMode: 'Matched'
         }]
       });
-      setNewFabric({ type: "", fab: "", color: "", price: "" });
+      setNewFabric({ type: "", fab: "", price: "" });
     }
+  };
+
+  const updateFabricMode = (id: number, mode: 'Matched' | 'Fixed') => {
+    const updated = dress.config.fabrics.map(f => f.id === id ? { ...f, colorMode: mode } : f);
+    updateDress(dress.id, 'config', { ...dress.config, fabrics: updated });
+  };
+
+  const updateFabricFixedColor = (id: number, color: string) => {
+    const updated = dress.config.fabrics.map(f => f.id === id ? { ...f, fixedColor: color } : f);
+    updateDress(dress.id, 'config', { ...dress.config, fabrics: updated });
+  };
+
+  const toggleSelection = () => {
+    const newState = dress.isChecked === false ? true : false;
+    updateDress(dress.id, 'isChecked', newState);
+    showNotify(newState ? "Product included in Dashboard" : "Product excluded from Dashboard");
   };
 
   const renderTab0 = () => (
@@ -110,7 +129,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
             <tr>
               <th className="p-4 rounded-tl-xl">Type (Component)</th>
               <th className="p-4">Fabrication</th>
-              <th className="p-4">Color</th>
               <th className="p-4 text-right">Ref. Price (MMK)</th>
               <th className="p-4 text-center rounded-tr-xl">Action</th>
             </tr>
@@ -120,17 +138,15 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
               <tr key={f.id}>
                 <td className="p-4 font-bold">{f.type}</td>
                 <td className="p-4 font-mono">{f.code}</td>
-                <td className="p-4 uppercase">{f.color}</td>
                 <td className="p-4 text-right font-black">{f.price.toLocaleString()}</td>
                 <td className="p-4 text-center"><button onClick={() => updateDress(dress.id, 'config', {...dress.config, fabrics: dress.config.fabrics.filter(x => x.id !== f.id)})} className="text-rose-400 hover:text-rose-600"><Trash2 size={14}/></button></td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="grid grid-cols-5 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <input className="border rounded-xl px-3 py-2 text-xs" placeholder="Component" value={newFabric.type} onChange={e => setNewFabric({...newFabric, type: e.target.value})} />
           <input className="border rounded-xl px-3 py-2 text-xs" placeholder="Fabrication" value={newFabric.fab} onChange={e => setNewFabric({...newFabric, fab: e.target.value})} />
-          <input className="border rounded-xl px-3 py-2 text-xs" placeholder="Color" value={newFabric.color} onChange={e => setNewFabric({...newFabric, color: e.target.value})} />
           <input className="border rounded-xl px-3 py-2 text-xs text-right" placeholder="Price" value={newFabric.price} onChange={e => setNewFabric({...newFabric, price: e.target.value})} />
           <Button onClick={addFabric} variant="secondary" icon={Plus}>Add Fabric</Button>
         </div>
@@ -139,104 +155,150 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
     </div>
   );
 
-  const renderTab1 = () => (
-    <div className="space-y-6 animate-fadeIn">
-      <Card className="p-8" accentColor="cyan">
-        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2"><TrendingUp size={16}/> Production Order Matrix</h3>
-        <div className="overflow-x-auto rounded-xl border">
-          <table className="w-full text-xs text-left">
-            <thead className="bg-slate-50 font-black uppercase text-slate-500">
-              <tr>
-                <th className="p-4 border-r">Size \ Color</th>
-                {dress.config.colors.map(c => <th key={c} className="p-4 text-center">{c}</th>)}
-                <th className="p-4 bg-slate-100 text-center">Batch Sum</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dress.config.sizes.map(s => (
-                <tr key={s} className="border-t">
-                  <td className="p-4 font-black border-r bg-slate-50/30 uppercase">{s}</td>
-                  {dress.config.colors.map(c => (
-                    <td key={c} className="p-0 border-r">
-                      <input type="number" className="w-full h-full p-4 text-center font-black focus:bg-cyan-50 outline-none" value={dress.orders[s]?.[c] || 0} onChange={e => {
-                        const next = {...dress.orders}; if(!next[s]) next[s] = {}; next[s][c] = parseInt(e.target.value) || 0;
-                        updateDress(dress.id, 'orders', next);
-                      }} />
-                    </td>
-                  ))}
-                  <td className="p-4 text-center font-black bg-cyan-50/30 text-cyan-700">{dress.config.colors.reduce((a,c) => a + (dress.orders[s]?.[c] || 0), 0)}</td>
+  const renderTab1 = () => {
+    const colorTotals: Record<string, number> = {};
+    dress.config.colors.forEach(c => {
+      colorTotals[c] = dress.config.sizes.reduce((sum, s) => sum + (dress.orders[s]?.[c] || 0), 0);
+    });
+    const grandTotal = Object.values(colorTotals).reduce((a, b) => a + b, 0);
+
+    return (
+      <div className="space-y-6 animate-fadeIn">
+        <Card className="p-8" accentColor="cyan">
+          <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2"><TrendingUp size={16}/> Production Order Matrix</h3>
+          <div className="overflow-x-auto rounded-xl border">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50 font-black uppercase text-slate-500">
+                <tr>
+                  <th className="p-4 border-r">Size \ Color</th>
+                  {dress.config.colors.map(c => <th key={c} className="p-4 text-center">{c}</th>)}
+                  <th className="p-4 bg-slate-100 text-center">Size Total</th>
                 </tr>
-              ))}
+              </thead>
+              <tbody>
+                {dress.config.sizes.map(s => (
+                  <tr key={s} className="border-t">
+                    <td className="p-4 font-black border-r bg-slate-50/30 uppercase">{s}</td>
+                    {dress.config.colors.map(c => (
+                      <td key={c} className="p-0 border-r">
+                        <input type="number" className="w-full h-full p-4 text-center font-black focus:bg-cyan-50 outline-none" value={dress.orders[s]?.[c] || 0} onChange={e => {
+                          const next = {...dress.orders}; if(!next[s]) next[s] = {}; next[s][c] = parseInt(e.target.value) || 0;
+                          updateDress(dress.id, 'orders', next);
+                        }} />
+                      </td>
+                    ))}
+                    <td className="p-4 text-center font-black bg-cyan-50/30 text-cyan-700">{dress.config.colors.reduce((a,c) => a + (dress.orders[s]?.[c] || 0), 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-slate-100 border-t-2 font-black text-slate-700">
+                <tr>
+                  <td className="p-4 border-r uppercase text-[10px]">Color Total</td>
+                  {dress.config.colors.map(c => (
+                    <td key={c} className="p-4 text-center text-cyan-700">{colorTotals[c]}</td>
+                  ))}
+                  <td className="p-4 text-center bg-cyan-600 text-white text-lg tracking-tighter">{grandTotal}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
+
+        <Card className="p-8" accentColor="indigo">
+          <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2"><Scissors size={16}/> Consumption Rate (Yards per Unit)</h3>
+          <div className="space-y-6">
+            {dress.config.fabrics.map(fab => (
+              <div key={fab.id} className="bg-slate-50 p-6 rounded-2xl border">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                  <div className="flex flex-col">
+                    <span className="font-black uppercase text-slate-700">{fab.type}</span>
+                    <span className="opacity-40 text-[10px] font-black uppercase tracking-widest">{fab.code}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex items-center gap-1 bg-white border px-3 py-1.5 rounded-xl shadow-sm">
+                      <span className="text-[10px] font-black text-slate-400 uppercase mr-1">Col Mode:</span>
+                      <select 
+                        className="text-[10px] font-black text-indigo-600 outline-none bg-transparent cursor-pointer"
+                        value={fab.colorMode}
+                        onChange={(e) => updateFabricMode(fab.id, e.target.value as any)}
+                      >
+                        <option value="Matched">Matched (All Colors)</option>
+                        <option value="Fixed">Fixed (Specific Color)</option>
+                      </select>
+                    </div>
+                    {fab.colorMode === 'Fixed' && (
+                      <div className="flex items-center gap-1 bg-white border px-3 py-1.5 rounded-xl shadow-sm animate-fadeIn">
+                        <span className="text-[10px] font-black text-slate-400 uppercase mr-1">Select:</span>
+                        <select 
+                          className="text-[10px] font-black text-rose-600 outline-none bg-transparent cursor-pointer"
+                          value={fab.fixedColor || ""}
+                          onChange={(e) => updateFabricFixedColor(fab.id, e.target.value)}
+                        >
+                          <option value="">Choose color...</option>
+                          {dress.config.colors.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {dress.config.sizes.map(s => (
+                    <div key={s}>
+                      <label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">{s} Cons</label>
+                      <div className="relative">
+                        <input type="number" className="w-full border rounded-lg px-3 py-2 text-sm font-black focus:ring-2 focus:ring-indigo-500" value={dress.consumption[fab.id]?.[s] || 0} onChange={e => {
+                          const next = {...dress.consumption}; if(!next[fab.id]) next[fab.id] = {}; next[fab.id][s] = parseFloat(e.target.value) || 0;
+                          updateDress(dress.id, 'consumption', next);
+                        }} />
+                        <span className="absolute right-3 top-2 text-[10px] text-slate-400">yds</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-8 bg-[#0f172a] text-white" accentColor="emerald">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] opacity-60 flex items-center gap-2"><FileText size={16}/> Consumption Report</h3>
+            <Button onClick={() => showNotify("Data Regenerated")} variant="secondary" className="bg-white/10 text-white hover:bg-white/20" icon={RefreshCw}>Regenerate</Button>
+          </div>
+          <table className="w-full text-xs">
+            <thead className="text-slate-400 font-black uppercase border-b border-white/10">
+              <tr><th className="p-4 text-left">Target / SKUs</th><th className="p-4 text-left">Component</th><th className="p-4 text-right">Total Requirement</th></tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {dress.config.fabrics.map(fab => {
+                let total = 0;
+                dress.config.sizes.forEach(s => {
+                  const q = dress.config.colors.reduce((acc,c) => acc + (dress.orders[s]?.[c] || 0), 0);
+                  total += q * (dress.consumption[fab.id]?.[s] || 0);
+                });
+                return (
+                  <tr key={fab.id}>
+                    <td className="p-4 font-black uppercase">
+                      {fab.colorMode === 'Fixed' ? (fab.fixedColor || 'FIXED') : 'MATCHED (ALL)'}
+                    </td>
+                    <td className="p-4 opacity-70">{fab.type} <span className="text-[9px] block opacity-50 font-mono">{fab.code}</span></td>
+                    <td className="p-4 text-right font-black text-emerald-400 text-lg">{total.toFixed(2)} yds</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+        </Card>
+        <div className="flex justify-between items-center">
+          <Button onClick={() => setActiveTab(0)} variant="secondary">Previous Step</Button>
+          <Button onClick={() => setActiveTab(2)} icon={CheckCircle}>Validate & Go to Step 2</Button>
         </div>
-      </Card>
-
-      <Card className="p-8" accentColor="indigo">
-        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2"><Scissors size={16}/> Consumption Rate (Yards per Unit)</h3>
-        <div className="space-y-6">
-          {dress.config.fabrics.map(fab => (
-            <div key={fab.id} className="bg-slate-50 p-6 rounded-2xl border">
-              <div className="flex justify-between items-center mb-4">
-                <span className="font-black uppercase text-slate-700">{fab.type} <span className="opacity-40 text-xs ml-2">({fab.code})</span></span>
-                <span className="text-[10px] font-black text-indigo-600 bg-white px-3 py-1 rounded-full border">COL: {fab.color}</span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {dress.config.sizes.map(s => (
-                  <div key={s}>
-                    <label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">{s} Cons</label>
-                    <div className="relative">
-                      <input type="number" className="w-full border rounded-lg px-3 py-2 text-sm font-black focus:ring-2 focus:ring-indigo-500" value={dress.consumption[fab.id]?.[s] || 0} onChange={e => {
-                        const next = {...dress.consumption}; if(!next[fab.id]) next[fab.id] = {}; next[fab.id][s] = parseFloat(e.target.value) || 0;
-                        updateDress(dress.id, 'consumption', next);
-                      }} />
-                      <span className="absolute right-3 top-2 text-[10px] text-slate-400">yds</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card className="p-8 bg-[#0f172a] text-white" accentColor="emerald">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] opacity-60 flex items-center gap-2"><FileText size={16}/> Consumption Report</h3>
-          <Button onClick={() => showNotify("Data Regenerated")} variant="secondary" className="bg-white/10 text-white hover:bg-white/20" icon={RefreshCw}>Regenerate</Button>
-        </div>
-        <table className="w-full text-xs">
-          <thead className="text-slate-400 font-black uppercase border-b border-white/10">
-            <tr><th className="p-4 text-left">Fabric Color</th><th className="p-4 text-left">Component</th><th className="p-4 text-right">Total Requirement</th></tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {dress.config.fabrics.map(fab => {
-              let total = 0;
-              dress.config.sizes.forEach(s => {
-                const q = dress.config.colors.reduce((acc,c) => acc + (dress.orders[s]?.[c] || 0), 0);
-                total += q * (dress.consumption[fab.id]?.[s] || 0);
-              });
-              return (
-                <tr key={fab.id}>
-                  <td className="p-4 font-black uppercase">{fab.color}</td>
-                  <td className="p-4 opacity-70">{fab.type}</td>
-                  <td className="p-4 text-right font-black text-emerald-400 text-lg">{total.toFixed(2)} yds</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </Card>
-      <div className="flex justify-between items-center">
-        <Button onClick={() => setActiveTab(0)} variant="secondary">Previous Step</Button>
-        <Button onClick={() => setActiveTab(2)} icon={CheckCircle}>Validate & Go to Step 2</Button>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderTab2 = () => (
     <div className="space-y-6 animate-fadeIn">
-      {/* A. Top Configuration Bar */}
       <Card className="p-0 overflow-hidden sticky top-20 z-10 shadow-lg border-fuchsia-400" accentColor="fuchsia">
         <div 
           className="bg-slate-50 p-4 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-colors"
@@ -247,7 +309,7 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
             <span className="text-xs font-black uppercase tracking-widest text-slate-700">Global Cost Configuration</span>
           </div>
           <div className="flex items-center gap-4">
-             <Button size="sm" onClick={(e) => { e.stopPropagation(); showNotify("Data Regenerated"); }} icon={RefreshCw} variant="primary" className="h-8 py-0 px-3 text-[10px]">Regenerate</Button>
+             <Button onClick={(e) => { e.stopPropagation(); showNotify("Data Regenerated"); }} icon={RefreshCw} variant="primary" className="h-8 py-0 px-3 text-[10px]">Regenerate</Button>
              {isConfigExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </div>
         </div>
@@ -264,7 +326,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
         )}
       </Card>
 
-      {/* B. Table 1: Investment Breakdown Result */}
       <Card className="p-0 overflow-hidden" accentColor="blue">
         <div className="p-6 bg-white border-b flex items-center justify-between">
           <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-800 flex items-center gap-2">
@@ -289,7 +350,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
             <tbody className="divide-y divide-slate-100">
               {metrics.sizeMetrics.map((m) => (
                 <React.Fragment key={m.size}>
-                  {/* Fabric Rows */}
                   {m.fabricRows.map((fr) => (
                     <tr key={fr.id} className="hover:bg-slate-50 transition-colors">
                       <td className="p-4 pl-6 font-medium text-slate-700">{fr.type} ({fr.code})</td>
@@ -302,7 +362,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                       <td className="p-4 text-right font-black text-slate-900 pr-6">{formatCurrency(fr.totalRowCost)}</td>
                     </tr>
                   ))}
-                  {/* Sewing Row */}
                   <tr className="hover:bg-slate-50 transition-colors">
                     <td className="p-4 pl-6 font-medium text-slate-700">Sewing Cost</td>
                     <td className="p-4 uppercase font-bold text-slate-400">{m.size}</td>
@@ -313,7 +372,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                     <td className="p-4 text-center font-black">{m.qty}</td>
                     <td className="p-4 text-right font-black text-slate-900 pr-6">{formatCurrency(m.sewingRowCost)}</td>
                   </tr>
-                  {/* Accessories Row */}
                   <tr className="hover:bg-slate-50 transition-colors">
                     <td className="p-4 pl-6 font-medium text-slate-700">Accessories</td>
                     <td className="p-4 uppercase font-bold text-slate-400">{m.size}</td>
@@ -324,7 +382,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                     <td className="p-4 text-center font-black">{m.qty}</td>
                     <td className="p-4 text-right font-black text-slate-900 pr-6">{formatCurrency(m.accRowCost)}</td>
                   </tr>
-                  {/* Size Group Summary Row */}
                   <tr className="bg-slate-50 font-black border-t-2 border-slate-200">
                     <td colSpan={7} className="p-4 text-right text-slate-500 uppercase italic text-[9px] tracking-widest">
                       Subtotal + Wastage ({dress.costs.wastagePct}%) + Marketing ({dress.costs.marketingPct}%) + Trans. & Ops. ({dress.costs.opsPct}%) = Total Unit Investment:
@@ -336,7 +393,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                 </React.Fragment>
               ))}
             </tbody>
-            {/* Table Footer Summary Block */}
             <tfoot className="bg-white border-t-4 border-slate-900">
               <tr>
                 <td colSpan={7} className="p-3 text-right text-slate-400 uppercase font-black text-[10px]">Marketing Cost ({dress.costs.marketingPct}%):</td>
@@ -365,7 +421,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
         </div>
       </Card>
 
-      {/* C. Table 2: Sales & Profitability Result */}
       <Card className="p-0 overflow-hidden" accentColor="emerald">
         <div className="p-6 bg-white border-b">
            <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-800 flex items-center gap-2">
@@ -427,7 +482,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
   );
 
   const renderTab3 = () => {
-    // Chart data generation
     const maxUnits = Math.max(metrics.totalQty * 1.5, metrics.bepUnits * 1.5, 50);
     const steps = 10;
     const chartData = Array.from({ length: steps + 1 }, (_, i) => {
@@ -440,7 +494,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
 
     return (
       <div className="space-y-6 animate-fadeIn">
-        {/* New Sales Pricing Analysis Component */}
         <Card className="p-6 overflow-hidden" accentColor="slate">
           <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-800 mb-6 flex items-center gap-2">
             <PieChart size={18} className="text-slate-500"/> Sales Pricing
@@ -470,24 +523,18 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
               <tbody className="divide-y divide-slate-100 bg-white">
                 {metrics.sizeMetrics.map(m => {
                   const cog = m.varUnitCost;
-                  
                   const calculateProfitability = (price: number) => {
                     const margin = price - cog;
                     const pct = price > 0 ? (margin / price) * 100 : 0;
                     return { margin, pct };
                   };
-
                   const retailRes = calculateProfitability(m.retailPrice);
                   const wsRes = calculateProfitability(m.wsPrice);
                   const flashRes = calculateProfitability(m.flashPrice);
-
                   const getValColor = (val: number) => val >= 0 ? 'text-emerald-500' : 'text-rose-500';
-
                   return (
                     <tr key={m.size} className="hover:bg-slate-50 font-bold group transition-colors">
                       <td className="p-4 uppercase text-slate-700">{m.size}</td>
-                      
-                      {/* Retail Section */}
                       <td className="p-2 border-l border-slate-200">
                         <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-right w-24 ml-auto text-slate-700 font-black">
                           {formatCurrency(m.retailPrice)}
@@ -495,8 +542,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                       </td>
                       <td className={`p-4 text-right ${getValColor(retailRes.margin)}`}>{formatCurrency(retailRes.margin)}</td>
                       <td className={`p-4 text-right ${getValColor(retailRes.pct)}`}>{retailRes.pct.toFixed(1)}%</td>
-                      
-                      {/* Wholesale Section */}
                       <td className="p-2 border-l border-slate-200">
                         <input 
                           type="number"
@@ -507,8 +552,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                       </td>
                       <td className={`p-4 text-right ${getValColor(wsRes.margin)}`}>{formatCurrency(wsRes.margin)}</td>
                       <td className={`p-4 text-right ${getValColor(wsRes.pct)}`}>{wsRes.pct.toFixed(1)}%</td>
-                      
-                      {/* Flash Section */}
                       <td className="p-2 border-l border-slate-200">
                         <input 
                           type="number"
@@ -525,12 +568,8 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
               </tbody>
             </table>
           </div>
-          <div className="mt-4 text-[10px] text-slate-400 font-black uppercase tracking-widest border-t border-slate-100 pt-4">
-            Margin = Price - CoG | Margin % = (Margin / Price) × 100
-          </div>
         </Card>
 
-        {/* Existing KPIs and Chart Section */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
            <Card className="p-6 md:col-span-1" accentColor="emerald">
               <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total Project Investment</p>
@@ -555,15 +594,15 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
             <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2"><PieChart size={16}/> Break-Even Analysis</h3>
             <div className="space-y-4">
               <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-xs font-bold text-slate-500 uppercase">Fixed Cost</span>
+                <span className="text-xs font-bold text-slate-700 uppercase">Fixed Cost</span>
                 <span className="text-sm font-black">{formatCurrency(metrics.totalFixedCost)} MMK</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-xs font-bold text-slate-500 uppercase">Avg Variable Cost</span>
+                <span className="text-xs font-bold text-slate-700 uppercase">Avg Variable Cost</span>
                 <span className="text-sm font-black">{formatCurrency(Math.round(metrics.avgVarCost))} MMK</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-xs font-bold text-slate-500 uppercase">Avg Sales Price</span>
+                <span className="text-xs font-bold text-slate-700 uppercase">Avg Sales Price</span>
                 <span className="text-sm font-black">{formatCurrency(Math.round(metrics.avgPrice))} MMK</span>
               </div>
               <div className="bg-rose-50 p-4 rounded-xl border border-rose-100 mt-4">
@@ -576,12 +615,6 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                    <span className="text-sm font-black text-rose-700">{formatCurrency(Math.ceil(metrics.bepUnits) * metrics.avgPrice)} MMK</span>
                 </div>
               </div>
-            </div>
-            <div className="mt-8 p-4 bg-emerald-50 rounded-xl border border-emerald-100 flex items-start gap-3">
-               <AlertCircle size={18} className="text-emerald-500 mt-0.5"/>
-               <p className="text-[10px] text-emerald-800 leading-relaxed font-medium">
-                 The intersection point at <span className="font-black underline">{Math.ceil(metrics.bepUnits)} units</span> represents your Break-Even Point.
-               </p>
             </div>
           </Card>
 
@@ -597,19 +630,16 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                     tick={{ fontSize: 10, fontWeight: 600 }}
                   />
                   <YAxis 
-                    label={{ value: 'MMK Value', angle: -90, position: 'insideLeft', fontSize: 10, fontWeight: 900 }} 
                     tick={{ fontSize: 10, fontWeight: 600 }}
                     tickFormatter={(val) => (val / 1000) + 'k'}
                   />
                   <Tooltip 
                     formatter={(value: number) => value.toLocaleString() + ' MMK'} 
-                    labelFormatter={(label) => `Quantity: ${label} pcs`}
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold' }}
                   />
                   <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }} />
                   <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
                   <Line type="monotone" dataKey="totalCost" name="Total Cost" stroke="#ef4444" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                  <Line type="step" dataKey="fixedCost" name="Fixed Cost" stroke="#64748b" strokeWidth={2} strokeDasharray="5 5" dot={false} />
                   {metrics.bepUnits > 0 && (
                     <ReferenceLine x={Math.ceil(metrics.bepUnits)} stroke="#8b5cf6" strokeDasharray="3 3" label={{ position: 'top', value: 'BEP', fontSize: 10, fill: '#8b5cf6', fontWeight: 900 }} />
                   )}
@@ -631,8 +661,36 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
     <div className="space-y-6 pb-20">
       {notification && <div className="fixed top-24 right-8 z-50 bg-slate-900 text-white px-8 py-4 rounded-3xl shadow-2xl animate-fadeIn font-black text-[10px] uppercase tracking-widest">{notification}</div>}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div><div className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest mb-1"><span onClick={onBack} className="cursor-pointer hover:text-indigo-600">PORTFOLIO</span> <ChevronRight size={14}/> <span>{dress.code}</span></div><h2 className="text-3xl font-black tracking-tighter text-slate-900">{dress.name}</h2></div>
-        <div className="flex gap-2"><Button onClick={onBack} variant="secondary">Back</Button></div>
+        <div><div className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest mb-1"><span onClick={onBack} className="cursor-pointer hover:text-indigo-600">PORTFOLIO</span> <ChevronRight size={14}/> <span>{dress.name}</span></div><h2 className="text-3xl font-black tracking-tighter text-slate-900">{dress.name}</h2></div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={toggleSelection}
+            disabled={isSyncing}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-sm border ${dress.isChecked === false ? 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200' : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'}`}
+          >
+            {dress.isChecked === false ? <Square size={18} /> : <CheckSquare size={18} />}
+            <span>{dress.isChecked === false ? "Excluded" : "Included"}</span>
+          </button>
+          
+          <Button 
+            onClick={() => onDelete(dress.id)} 
+            variant="danger" 
+            disabled={isSyncing}
+            className="group relative"
+          >
+            {isSyncing ? (
+              <span className="flex items-center gap-2">
+                <Loader2 size={16} className="animate-spin" /> Deleting...
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <Trash2 size={16} /> Delete Product
+              </span>
+            )}
+          </Button>
+          
+          <Button onClick={onBack} variant="secondary">Back</Button>
+        </div>
       </div>
       <div className="flex gap-2 border-b overflow-x-auto custom-scrollbar whitespace-nowrap">
         {[0, 1, 2, 3].map(t => (
