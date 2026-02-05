@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Scissors, Shirt, Activity, Settings, DollarSign, TrendingUp, PieChart, Star, ShieldCheck, Calendar, ChevronDown, RefreshCw, FileText, BarChart3
+  Scissors, Shirt, Activity, Settings, DollarSign, TrendingUp, PieChart, Star, ShieldCheck, Calendar, ChevronDown, RefreshCw, FileText, BarChart3, Target
 } from 'lucide-react';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ComposedChart, Line
+} from 'recharts';
 import { Dress, Metrics } from '../types';
 import { KpiCard, Card, Button } from '../components';
 import { calculateMetrics } from '../logic';
@@ -73,14 +76,12 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
       const mult = qConfig[qKey].mult;
       
       return itemsWithMetrics.reduce((acc, item) => {
-        // Base COGS = Fabrics (no wastage) + Sewing + Accessories
         const fabricBase = item.metrics.sizeMetrics.reduce((sum, sm) => 
           sum + sm.fabricRows.reduce((fSum, fr) => fSum + (fr.unitCost * sm.qty), 0), 0
         );
         const sewingAcc = item.metrics.sizeMetrics.reduce((sum, sm) => sum + sm.sewingRowCost + sm.accRowCost, 0);
         const baseCOGS = fabricBase + sewingAcc;
 
-        // Base Components
         const baseWastage = item.metrics.sizeMetrics.reduce((sum, sm) => 
           sum + sm.fabricRows.reduce((fSum, fr) => fSum + (fr.wastageAmt * sm.qty), 0), 0
         );
@@ -120,19 +121,14 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
     const calculateQuarterSalesData = (qKey: 'Q1' | 'Q2' | 'Q3') => {
       const mult = qConfig[qKey].mult;
       const salesPct = qConfig[qKey].sales / 100;
-      
-      // Total Production Potential (TPP) = Sum of (Retail Price * Base Qty * Mult)
       const tpp = itemsWithMetrics.reduce((sum, item) => sum + (item.metrics.avgPrice * item.metrics.totalQty * mult), 0);
       const revenue = tpp * salesPct;
-
       return { tpp, revenue };
     };
 
     const q1Data = calculateQuarterSalesData('Q1');
     const q2Data = calculateQuarterSalesData('Q2');
     const q3Data = calculateQuarterSalesData('Q3');
-
-    // Total Project Investment row is the last row of investmentBreakdown
     const invRow = investmentBreakdown[6];
 
     const profit1 = q1Data.revenue - invRow.q1;
@@ -147,6 +143,61 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
       { label: 'Gross Margin %', q1: q1Data.revenue > 0 ? (profit1 / q1Data.revenue) * 100 : 0, q2: q2Data.revenue > 0 ? (profit2 / q2Data.revenue) * 100 : 0, q3: q3Data.revenue > 0 ? (profit3 / q3Data.revenue) * 100 : 0, type: 'margin' },
     ];
   }, [itemsWithMetrics, qConfig, investmentBreakdown]);
+
+  // 3. Break Even Analysis (Quarterly Planner)
+  const breakEvenBreakdown = useMemo(() => {
+    // A. Total Fixed Cost (FC_x)
+    const fixedRow = investmentBreakdown[5];
+    
+    // B. Weighted Average Metrics (V and P)
+    const totalBaseQty = itemsWithMetrics.reduce((sum, item) => sum + item.metrics.totalQty, 0);
+    const avgUnitVarCost = totalBaseQty > 0 
+      ? itemsWithMetrics.reduce((sum, item) => sum + (item.metrics.avgVarCost * item.metrics.totalQty), 0) / totalBaseQty 
+      : 0;
+    const avgRetailPrice = totalBaseQty > 0 
+      ? itemsWithMetrics.reduce((sum, item) => sum + (item.metrics.avgPrice * item.metrics.totalQty), 0) / totalBaseQty 
+      : 0;
+
+    const contributionMargin = avgRetailPrice - avgUnitVarCost;
+
+    const calculateBEU = (fc: number) => contributionMargin > 0 ? Math.ceil(fc / contributionMargin) : 0;
+    
+    const beu1 = calculateBEU(fixedRow.q1);
+    const beu2 = calculateBEU(fixedRow.q2);
+    const beu3 = calculateBEU(fixedRow.q3);
+
+    const ber1 = beu1 * avgRetailPrice;
+    const ber2 = beu2 * avgRetailPrice;
+    const ber3 = beu3 * avgRetailPrice;
+
+    // Projected Revenues from Section 2
+    const rev1 = salesProfitBreakdown[1].q1;
+    const rev2 = salesProfitBreakdown[1].q2;
+    const rev3 = salesProfitBreakdown[1].q3;
+
+    const calculateSafetyMargin = (rev: number, ber: number) => rev > 0 ? ((rev - ber) / rev) * 100 : -100;
+
+    return [
+      { label: 'Total Fixed Cost', q1: fixedRow.q1, q2: fixedRow.q2, q3: fixedRow.q3, type: 'fc' },
+      { label: 'Avg. Unit Variable Cost', q1: avgUnitVarCost, q2: avgUnitVarCost, q3: avgUnitVarCost, type: 'static' },
+      { label: 'Avg. Sales Price (Retail)', q1: avgRetailPrice, q2: avgRetailPrice, q3: avgRetailPrice, type: 'static' },
+      { label: 'BREAK-EVEN UNITS', q1: beu1, q2: beu2, q3: beu3, type: 'units' },
+      { label: 'BREAK-EVEN REVENUE', q1: ber1, q2: ber2, q3: ber3, type: 'ber' },
+      { label: 'Safety Margin %', q1: calculateSafetyMargin(rev1, ber1), q2: calculateSafetyMargin(rev2, ber2), q3: calculateSafetyMargin(rev3, ber3), type: 'safety' },
+    ];
+  }, [itemsWithMetrics, investmentBreakdown, salesProfitBreakdown]);
+
+  const quarterlyChartData = useMemo(() => {
+    const invRow = investmentBreakdown[6];
+    const revRow = salesProfitBreakdown[1];
+    const bepRevRow = breakEvenBreakdown[4];
+
+    return [
+      { name: 'Q1', investment: invRow.q1, revenue: revRow.q1, bepRevenue: bepRevRow.q1 },
+      { name: 'Q2', investment: invRow.q2, revenue: revRow.q2, bepRevenue: bepRevRow.q2 },
+      { name: 'Q3', investment: invRow.q3, revenue: revRow.q3, bepRevenue: bepRevRow.q3 },
+    ];
+  }, [investmentBreakdown, salesProfitBreakdown, breakEvenBreakdown]);
 
   const handleGeneratePlan = () => {
     setIsGenerating(true);
@@ -288,7 +339,6 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {dashboardType !== 'quarterly' ? (
           <div className="lg:col-span-3">
-             {/* Same layout as financial/fabric tabs for consistency */}
              <Card className="p-10 text-center font-black text-slate-300">
                 Select "Quarterly Plan" to view the strategic breakdown.
              </Card>
@@ -503,6 +553,89 @@ const Dashboard: React.FC<DashboardProps> = ({ dresses, onEditDress }) => {
                  </table>
                </div>
             </Card>
+
+            {/* 3. Break Even Analysis (Quarterly Planner) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="p-0 overflow-hidden" accentColor="indigo">
+                <div className="bg-slate-50 p-5 border-b flex items-center gap-2">
+                  <Target size={18} className="text-indigo-500" />
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">3. Break Even Analysis</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-[11px] border-collapse min-w-[600px]">
+                    <thead className="bg-slate-100 text-slate-500 font-black uppercase text-[10px]">
+                      <tr>
+                        <th className="p-4 border-b pl-6">Description</th>
+                        <th className="p-4 border-b text-right">Q1 (MMK)</th>
+                        <th className="p-4 border-b text-right">Q2 (MMK)</th>
+                        <th className="p-4 border-b text-right">Q3 (MMK)</th>
+                        <th className="p-4 border-b text-right pr-6">Yearly Plan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white">
+                      {breakEvenBreakdown.map((row, idx) => {
+                        let textClass = "font-mono text-right";
+                        let valQ1: any = formatCurrency(row.q1);
+                        let valQ2: any = formatCurrency(row.q2);
+                        let valQ3: any = formatCurrency(row.q3);
+                        let valTotal: any = "";
+
+                        if (row.type === 'fc') valTotal = formatCurrency(row.q1 + row.q2 + row.q3);
+                        if (row.type === 'static') valTotal = formatCurrency(row.q1); 
+                        if (row.type === 'units') {
+                           textClass += " font-black text-slate-900";
+                           valTotal = formatCurrency(row.q1 + row.q2 + row.q3);
+                        }
+                        if (row.type === 'ber') {
+                           textClass += " font-black text-[#D4A017]";
+                           valTotal = formatCurrency(row.q1 + row.q2 + row.q3);
+                        }
+                        if (row.type === 'safety') {
+                          const getSafeColor = (v: number) => v < 0 ? 'text-rose-600 bg-rose-50 px-2 py-1 rounded-lg' : 'text-emerald-600';
+                          valQ1 = <span className={getSafeColor(row.q1)}>{row.q1.toFixed(1)}%</span>;
+                          valQ2 = <span className={getSafeColor(row.q2)}>{row.q2.toFixed(1)}%</span>;
+                          valQ3 = <span className={getSafeColor(row.q3)}>{row.q3.toFixed(1)}%</span>;
+                          const avgSafe = (row.q1 + row.q2 + row.q3) / 3;
+                          valTotal = <span className={getSafeColor(avgSafe)}>{avgSafe.toFixed(1)}%</span>;
+                        }
+
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-4 pl-6 border-b font-black uppercase text-slate-600">{row.label}</td>
+                            <td className={`p-4 border-b ${textClass}`}>{valQ1}</td>
+                            <td className={`p-4 border-b ${textClass}`}>{valQ2}</td>
+                            <td className={`p-4 border-b ${textClass}`}>{valQ3}</td>
+                            <td className={`p-4 border-b pr-6 ${textClass} font-black`}>{valTotal}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              {/* Quarterly Break-Even Chart */}
+              <Card className="p-6" accentColor="slate">
+                <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6">Quarterly Performance Analysis</h3>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={quarterlyChartData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 900 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fontWeight: 600 }} tickFormatter={(val) => (val / 1000000).toFixed(1) + 'M'} axisLine={false} tickLine={false} />
+                      <Tooltip 
+                        formatter={(val: number) => formatCurrency(val) + ' MMK'}
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold' }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', paddingTop: '20px' }} />
+                      <Bar dataKey="investment" name="Project Investment" fill="#ef4444" radius={[6, 6, 0, 0]} barSize={40} />
+                      <Bar dataKey="revenue" name="Expected Revenue" fill="#10b981" radius={[6, 6, 0, 0]} barSize={40} />
+                      <Line type="monotone" dataKey="bepRevenue" name="Break-Even Level" stroke="#D4A017" strokeWidth={3} strokeDasharray="5 5" dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            </div>
           </div>
         )}
       </div>
