@@ -28,7 +28,8 @@ export const Card: React.FC<CardProps> = ({ children, className = "", accentColo
 };
 
 interface ButtonProps {
-  children: React.ReactNode;
+  // Fix: children made optional to support buttons with only icons (icon-only buttons)
+  children?: React.ReactNode;
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'icon';
   className?: string;

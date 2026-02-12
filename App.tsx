@@ -14,7 +14,8 @@ import {
   CloudUpload,
   Cloud,
   AlertCircle,
-  Globe
+  Globe,
+  FileText
 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Dress } from './types';
@@ -332,7 +333,7 @@ const App: React.FC = () => {
               onClick={() => setActiveView('portfolio')}
               className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'portfolio' ? 'bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 text-cyan-400 border border-white/10 shadow-xl' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
             >
-              <CloudUpload size={20} />
+              <FileText size={20} />
               Portfolio Ledger
             </button>
             <button 
@@ -411,7 +412,7 @@ const App: React.FC = () => {
              <div className="flex flex-col">
                <h1 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-1">Command Control</h1>
                <p className="text-lg font-black text-slate-900 uppercase tracking-tight">
-                 {activeView === 'dashboard' ? 'Portfolio Performance' : activeView === 'portfolio' ? 'Strategic Ledger' : 'Production Editor'}
+                 {activeView === 'dashboard' ? 'Portfolio Performance' : activeView === 'portfolio' ? 'Portfolio Ledger' : 'Production Editor'}
                </p>
              </div>
           </div>
