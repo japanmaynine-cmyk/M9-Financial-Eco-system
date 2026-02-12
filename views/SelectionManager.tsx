@@ -547,11 +547,11 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
               <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-tighter">
                 <tr className="border-b">
                   <th className="p-4 pl-6 border-r border-slate-200 w-16" rowSpan={2}>SIZE</th>
-                  <th className="p-4 border-b border-r border-slate-200 text-center" colSpan={3}>RETAIL</th>
-                  <th className="p-4 border-b border-r border-slate-200 text-center" colSpan={3}>WHOLESALE</th>
-                  <th className="p-4 border-b text-center" colSpan={3}>FLASH SALES/PROMO</th>
+                  <th className="p-4 border-b border-r border-slate-200 text-center bg-indigo-50/50" colSpan={3}>RETAIL</th>
+                  <th className="p-4 border-b border-r border-slate-200 text-center bg-cyan-50/50" colSpan={3}>WHOLESALE</th>
+                  <th className="p-4 border-b text-center bg-amber-50/50" colSpan={3}>FLASH SALES/PROMO</th>
                 </tr>
-                <tr className="border-b">
+                <tr className="border-b text-[10px]">
                   {/* Retail Headers */}
                   <th className="p-2 border-r border-slate-100 text-center bg-indigo-50/30">Price</th>
                   <th className="p-2 border-r border-slate-100 text-center bg-indigo-50/30">Margin</th>
@@ -577,19 +577,19 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                   const ws = calcPriceData(wsPrice, cog);
                   const flash = calcPriceData(flashPrice, cog);
 
-                  const getMarginColor = (val: number) => val < 0 ? 'text-rose-500 font-black' : 'text-emerald-500 font-black';
+                  const getMarginColor = (val: number) => val < 0 ? 'text-red-500 font-black' : 'text-emerald-500 font-black';
 
                   return (
                     <tr key={m.size} className="border-b hover:bg-slate-50 transition-colors">
                       <td className="p-4 pl-6 border-r border-slate-200 font-black text-slate-800 bg-slate-50/20">{m.size}</td>
                       
                       {/* Retail Section (Read-Only) */}
-                      <td className="p-2 text-center font-bold text-slate-700 border-r border-slate-100 bg-indigo-50/10">{formatCurrency(retailPrice)}</td>
-                      <td className={`p-2 text-center border-r border-slate-100 bg-indigo-50/10 ${getMarginColor(retail.marginVal)}`}>{formatCurrency(retail.marginVal)}</td>
-                      <td className={`p-2 text-center border-r border-slate-200 bg-indigo-50/10 ${getMarginColor(retail.marginVal)}`}>{retail.marginPct.toFixed(1)}%</td>
+                      <td className="p-2 text-center font-bold text-slate-700 border-r border-slate-100 bg-indigo-50/5">{formatCurrency(retailPrice)}</td>
+                      <td className={`p-2 text-center border-r border-slate-100 bg-indigo-50/5 ${getMarginColor(retail.marginVal)}`}>{formatCurrency(retail.marginVal)}</td>
+                      <td className={`p-2 text-center border-r border-slate-200 bg-indigo-50/5 ${getMarginColor(retail.marginVal)}`}>{retail.marginPct.toFixed(1)}%</td>
 
                       {/* Wholesale Section (Editable) */}
-                      <td className="p-1 border-r border-slate-100 bg-cyan-50/10">
+                      <td className="p-1 border-r border-slate-100 bg-cyan-50/5">
                         <input 
                           type="number" 
                           className="w-full h-8 text-center bg-white border border-slate-200 rounded-md font-black outline-none focus:ring-2 focus:ring-cyan-500" 
@@ -602,11 +602,11 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                           }} 
                         />
                       </td>
-                      <td className={`p-2 text-center border-r border-slate-100 bg-cyan-50/10 ${getMarginColor(ws.marginVal)}`}>{formatCurrency(ws.marginVal)}</td>
-                      <td className={`p-2 text-center border-r border-slate-200 bg-cyan-50/10 ${getMarginColor(ws.marginVal)}`}>{ws.marginPct.toFixed(1)}%</td>
+                      <td className={`p-2 text-center border-r border-slate-100 bg-cyan-50/5 ${getMarginColor(ws.marginVal)}`}>{formatCurrency(ws.marginVal)}</td>
+                      <td className={`p-2 text-center border-r border-slate-200 bg-cyan-50/5 ${getMarginColor(ws.marginVal)}`}>{ws.marginPct.toFixed(1)}%</td>
 
                       {/* Flash Sales Section (Editable) */}
-                      <td className="p-1 border-r border-slate-100 bg-amber-50/10">
+                      <td className="p-1 border-r border-slate-100 bg-amber-50/5">
                         <input 
                           type="number" 
                           className="w-full h-8 text-center bg-white border border-slate-200 rounded-md font-black outline-none focus:ring-2 focus:ring-amber-500" 
@@ -619,8 +619,8 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                           }} 
                         />
                       </td>
-                      <td className={`p-2 text-center border-r border-slate-100 bg-amber-50/10 ${getMarginColor(flash.marginVal)}`}>{formatCurrency(flash.marginVal)}</td>
-                      <td className={`p-2 text-center bg-amber-50/10 ${getMarginColor(flash.marginVal)}`}>{flash.marginPct.toFixed(1)}%</td>
+                      <td className={`p-2 text-center border-r border-slate-100 bg-amber-50/5 ${getMarginColor(flash.marginVal)}`}>{formatCurrency(flash.marginVal)}</td>
+                      <td className={`p-2 text-center bg-amber-50/5 ${getMarginColor(flash.marginVal)}`}>{flash.marginPct.toFixed(1)}%</td>
                     </tr>
                   );
                 })}
@@ -690,7 +690,7 @@ const SelectionManager: React.FC<SelectionManagerProps> = ({ dress, updateDress,
                           formatter={(val: number) => formatCurrency(val) + ' MMK'}
                           contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold' }}
                        />
-                       <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', paddingTop: '10px' }} />
+                       <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', paddingTop: '20px' }} />
                        <Bar dataKey="investment" name="Total Cost" fill="#94a3b8" radius={[4, 4, 0, 0]} barSize={50} />
                        <Bar dataKey="revenue" name="Total Revenue" fill="#10b981" radius={[4, 4, 0, 0]} barSize={50} />
                        <Line type="monotone" dataKey="bepLevel" name="Break-Even" stroke="#e11d48" strokeWidth={3} strokeDasharray="5 5" dot={{ r: 5 }} />
