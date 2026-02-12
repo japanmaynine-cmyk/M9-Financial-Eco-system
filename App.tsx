@@ -15,7 +15,8 @@ import {
   Cloud,
   AlertCircle,
   Globe,
-  FileText
+  FileText,
+  Activity
 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Dress } from './types';
@@ -125,35 +126,36 @@ const App: React.FC = () => {
   };
 
   const updateDress = async (id: number, field: string | object, value?: any) => {
-    let updatedDress: Dress | undefined;
+    // 1. Find the dress to update
+    const dressToUpdate = dresses.find(d => d.id === id);
+    if (!dressToUpdate) return;
 
-    setDresses(prevDresses => {
-      return prevDresses.map(d => {
-        if (d.id !== id) return d;
-        let newD;
-        if (typeof field === 'object' && field !== null) {
-          newD = { ...d, ...field };
-        } else {
-          newD = { ...d, [field as string]: value };
-        }
-        updatedDress = newD;
-        return newD;
-      });
-    });
+    // 2. Calculate new dress state
+    let updatedDress: Dress;
+    if (typeof field === 'object' && field !== null) {
+      updatedDress = { ...dressToUpdate, ...field };
+    } else {
+      updatedDress = { ...dressToUpdate, [field as string]: value };
+    }
 
-    if (updatedDress) {
-      setIsSaving(true);
-      try {
-        const { error } = await supabase
-          .from('dresses')
-          .update({ content: updatedDress })
-          .eq('id', id);
-        if (error) console.error('Supabase sync error:', error);
-      } catch (e) {
-        console.error('Supabase update error:', e);
-      } finally {
-        setIsSaving(false);
+    // 3. Update local state immediately for UI responsiveness
+    setDresses(prevDresses => prevDresses.map(d => d.id === id ? updatedDress : d));
+
+    // 4. Update the database
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('dresses')
+        .update({ content: updatedDress })
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Supabase update failed:', error);
       }
+    } catch (e) {
+      console.error('Supabase connection error during update:', e);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -163,7 +165,7 @@ const App: React.FC = () => {
     
     const newDressBase: Partial<Dress> = {
       code: `M9-${Date.now().toString().slice(-4)}`,
-      name: 'New Product Line',
+      name: 'New Production Model',
       category: 'Top',
       fabrication: 'TBD',
       isChecked: true,
@@ -296,10 +298,10 @@ const App: React.FC = () => {
           </Card>
           
           <div className="flex items-center justify-center gap-6 mt-12 opacity-30">
-            <span className="text-[10px] font-black text-white uppercase tracking-widest">Global v2.6</span>
+            <span className="text-[10px] font-black text-white uppercase tracking-widest">M9 Planner v2.8</span>
             <div className="w-1 h-1 bg-white rounded-full"></div>
             <span className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-1">
-              <Globe size={10} /> Cloud Sync
+              <Globe size={10} /> Secure Sync
             </span>
           </div>
         </div>
@@ -316,8 +318,8 @@ const App: React.FC = () => {
               <span className="text-white text-2xl font-black italic tracking-tighter">M9</span>
             </div>
             <div>
-              <h2 className="text-sm font-black uppercase tracking-widest leading-none">ECOSYSTEM</h2>
-              <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-[0.2em] mt-2">Financials</p>
+              <h2 className="text-sm font-black uppercase tracking-widest leading-none">PLANNER</h2>
+              <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-[0.2em] mt-2">Money Maker</p>
             </div>
           </div>
 
@@ -327,14 +329,14 @@ const App: React.FC = () => {
               className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'dashboard' ? 'bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 text-cyan-400 border border-white/10 shadow-xl' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
             >
               <LayoutDashboard size={20} />
-              Financial Hub
+              Performance Hub
             </button>
             <button 
               onClick={() => setActiveView('portfolio')}
               className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'portfolio' ? 'bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 text-cyan-400 border border-white/10 shadow-xl' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
             >
               <FileText size={20} />
-              Portfolio Ledger
+              Strategic Ledger
             </button>
             <button 
               onClick={() => {
@@ -347,8 +349,8 @@ const App: React.FC = () => {
               }}
               className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'manager' ? 'bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 text-cyan-400 border border-white/10 shadow-xl' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
             >
-              <Shirt size={20} />
-              Product Editor
+              <Activity size={20} />
+              Production Editor
             </button>
           </nav>
 
@@ -393,7 +395,7 @@ const App: React.FC = () => {
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-[10px] font-black text-white uppercase tracking-wider truncate">{session?.user?.email}</p>
-              <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Active Account</p>
+              <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Authenticated User</p>
             </div>
           </div>
           <button 
@@ -401,7 +403,7 @@ const App: React.FC = () => {
             className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-rose-500 hover:text-white transition-all duration-300"
           >
             <LogOut size={16} />
-            Kill Session
+            Terminate
           </button>
         </div>
       </aside>
@@ -410,9 +412,9 @@ const App: React.FC = () => {
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200 px-10 py-5 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-5">
              <div className="flex flex-col">
-               <h1 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-1">Command Control</h1>
+               <h1 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-1">M9 Command Control</h1>
                <p className="text-lg font-black text-slate-900 uppercase tracking-tight">
-                 {activeView === 'dashboard' ? 'Portfolio Performance' : activeView === 'portfolio' ? 'Portfolio Ledger' : 'Production Editor'}
+                 {activeView === 'dashboard' ? 'Performance Hub' : activeView === 'portfolio' ? 'Strategic Ledger' : 'Production Editor'}
                </p>
              </div>
           </div>
@@ -421,12 +423,12 @@ const App: React.FC = () => {
                 {isSaving ? (
                   <div className="flex items-center gap-3 animate-pulse">
                     <CloudUpload size={14} className="text-amber-500" />
-                    <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Saving Cloud</span>
+                    <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Committing Cloud</span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-3">
                     <Cloud size={14} className="text-emerald-500" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Synced Secure</span>
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Secure & Synced</span>
                   </div>
                 )}
              </div>
