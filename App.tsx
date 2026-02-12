@@ -13,12 +13,14 @@ import {
   Loader2,
   CloudUpload,
   Cloud,
-  AlertCircle
+  AlertCircle,
+  Briefcase
 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Dress } from './types';
 import SelectionManager from './views/SelectionManager';
 import Dashboard from './views/Dashboard';
+import PortfolioHubView from './views/PortfolioHub';
 import { Button, Card } from './components';
 import { supabase } from './supabaseClient';
 
@@ -28,7 +30,7 @@ const App: React.FC = () => {
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [loginError, setLoginError] = useState('');
   
-  const [activeView, setActiveView] = useState<'dashboard' | 'manager'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'manager' | 'portfolio'>('dashboard');
   const [selectedDressId, setSelectedDressId] = useState<number | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -172,7 +174,6 @@ const App: React.FC = () => {
     };
 
     try {
-      // Corrected Schema Interaction: Include user_id and content
       const { data, error } = await supabase
         .from('dresses')
         .insert([{ 
@@ -314,7 +315,7 @@ const App: React.FC = () => {
             </div>
             <div>
               <h2 className="text-sm font-black uppercase tracking-widest leading-none">ECOSYSTEM</h2>
-              <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-[0.2em] mt-2">Production</p>
+              <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-[0.2em] mt-2">Financial Hub</p>
             </div>
           </div>
 
@@ -325,6 +326,13 @@ const App: React.FC = () => {
             >
               <LayoutDashboard size={20} />
               Portfolio Hub
+            </button>
+            <button 
+              onClick={() => setActiveView('portfolio')}
+              className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'portfolio' ? 'bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 text-cyan-400 border border-white/10 shadow-xl' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+            >
+              <Briefcase size={20} />
+              Portfolio Ledger
             </button>
             <button 
               onClick={() => {
@@ -401,7 +409,7 @@ const App: React.FC = () => {
              <div className="flex flex-col">
                <h1 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-1">M9 Command Center</h1>
                <p className="text-lg font-black text-slate-900 uppercase tracking-tight">
-                 {activeView === 'dashboard' ? 'Portfolio Overview' : 'Production Ledger Editor'}
+                 {activeView === 'dashboard' ? 'Portfolio Overview' : activeView === 'portfolio' ? 'Portfolio Ledger' : 'Production Ledger Editor'}
                </p>
              </div>
           </div>
@@ -428,18 +436,20 @@ const App: React.FC = () => {
         </header>
 
         <div className="p-10 flex-1">
-          {activeView === 'dashboard' ? (
+          {activeView === 'dashboard' && (
             <Dashboard dresses={dresses} onEditDress={(id) => { setSelectedDressId(id); setActiveView('manager'); }} />
-          ) : (
-            selectedDress && (
-              <SelectionManager 
-                dress={selectedDress} 
-                updateDress={updateDress} 
-                onBack={() => setActiveView('dashboard')} 
-                onDelete={deleteDress}
-                isSyncing={isSyncing}
-              />
-            )
+          )}
+          {activeView === 'portfolio' && (
+             <PortfolioHubView />
+          )}
+          {activeView === 'manager' && selectedDress && (
+            <SelectionManager 
+              dress={selectedDress} 
+              updateDress={updateDress} 
+              onBack={() => setActiveView('dashboard')} 
+              onDelete={deleteDress}
+              isSyncing={isSyncing}
+            />
           )}
         </div>
       </main>
