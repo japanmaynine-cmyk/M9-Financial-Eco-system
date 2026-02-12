@@ -14,7 +14,7 @@ import {
   CloudUpload,
   Cloud,
   AlertCircle,
-  Briefcase
+  Globe
 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Dress } from './types';
@@ -184,7 +184,6 @@ const App: React.FC = () => {
 
       if (error) {
         console.error('Error creating dress:', error);
-        alert(`Supabase Error: ${error.message}`);
       } else if (data && data.length > 0) {
         const created: Dress = { ...newDressBase, id: data[0].id } as Dress;
         setDresses(prev => [...prev, created]);
@@ -224,7 +223,7 @@ const App: React.FC = () => {
 
   const selectedDress = dresses.find(d => d.id === selectedDressId);
 
-  if (!isLoaded) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white font-black italic tracking-widest animate-pulse">BOOTING M9 ECOSYSTEM...</div>;
+  if (!isLoaded) return <div className="min-h-screen bg-[#0f172a] flex items-center justify-center text-white font-black italic tracking-widest animate-pulse uppercase">Initializing M9 Secure Core...</div>;
 
   if (!session) {
     return (
@@ -238,11 +237,11 @@ const App: React.FC = () => {
               <span className="text-white text-4xl font-black italic tracking-tighter">M9</span>
             </div>
             <h1 className="text-white text-3xl font-black uppercase tracking-[0.4em] text-center mb-2">Money Maker</h1>
-            <p className="text-cyan-400 text-xs font-bold uppercase tracking-[0.2em]">Garment Financial Ledger Pro</p>
+            <p className="text-cyan-400 text-xs font-bold uppercase tracking-[0.2em]">Financial Ledger Ecosystem</p>
           </div>
 
-          <Card className="p-10 bg-white/5 backdrop-blur-3xl border-white/10 shadow-2xl" accentColor="cyan">
-            <form onSubmit={handleLogin} className="space-y-8">
+          <Card className="p-8 bg-white/5 backdrop-blur-3xl border-white/10 shadow-2xl space-y-8" accentColor="cyan">
+            <form onSubmit={handleLogin} className="space-y-6">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                   <Mail size={12} className="text-cyan-400" /> Admin Email
@@ -251,7 +250,7 @@ const App: React.FC = () => {
                   type="email"
                   required
                   placeholder="admin@m9.com"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-white font-bold outline-none focus:ring-2 focus:ring-cyan-500 transition-all placeholder:text-slate-700"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white font-bold outline-none focus:ring-2 focus:ring-cyan-500 transition-all placeholder:text-slate-700 text-sm"
                   value={loginForm.email}
                   onChange={e => setLoginForm({...loginForm, email: e.target.value})}
                 />
@@ -265,7 +264,7 @@ const App: React.FC = () => {
                   type="password"
                   required
                   placeholder="••••••••"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-white font-bold outline-none focus:ring-2 focus:ring-fuchsia-500 transition-all placeholder:text-slate-700"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white font-bold outline-none focus:ring-2 focus:ring-fuchsia-500 transition-all placeholder:text-slate-700 text-sm"
                   value={loginForm.password}
                   onChange={e => setLoginForm({...loginForm, password: e.target.value})}
                 />
@@ -281,24 +280,26 @@ const App: React.FC = () => {
               <button 
                 type="submit"
                 disabled={isAuthenticating}
-                className="w-full bg-gradient-to-r from-fuchsia-600 to-cyan-600 text-white font-black uppercase tracking-[0.3em] py-5 rounded-2xl shadow-[0_10px_30px_rgba(8,145,178,0.3)] hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-3 group disabled:opacity-50"
+                className="w-full bg-gradient-to-r from-fuchsia-600 to-cyan-600 text-white font-black uppercase tracking-[0.3em] py-4 rounded-2xl shadow-[0_10px_30px_rgba(8,145,178,0.3)] hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-3 group disabled:opacity-50 text-[11px]"
               >
                 {isAuthenticating ? (
                   <Loader2 size={20} className="animate-spin" />
                 ) : (
                   <>
-                    Initialize Dashboard
-                    <ArrowRight size={20} className="group-hover:translate-x-2 transition-transform" />
+                    Initialize Core
+                    <ArrowRight size={18} className="group-hover:translate-x-2 transition-transform" />
                   </>
                 )}
               </button>
             </form>
           </Card>
           
-          <div className="flex items-center justify-center gap-6 mt-12 opacity-30 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-700 cursor-default">
-            <span className="text-[10px] font-black text-white uppercase tracking-widest">Enterprise v2.5</span>
+          <div className="flex items-center justify-center gap-6 mt-12 opacity-30">
+            <span className="text-[10px] font-black text-white uppercase tracking-widest">Global v2.6</span>
             <div className="w-1 h-1 bg-white rounded-full"></div>
-            <span className="text-[10px] font-black text-white uppercase tracking-widest">Secured Cloud</span>
+            <span className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-1">
+              <Globe size={10} /> Cloud Sync
+            </span>
           </div>
         </div>
       </div>
@@ -315,7 +316,7 @@ const App: React.FC = () => {
             </div>
             <div>
               <h2 className="text-sm font-black uppercase tracking-widest leading-none">ECOSYSTEM</h2>
-              <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-[0.2em] mt-2">Financial Hub</p>
+              <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-[0.2em] mt-2">Financials</p>
             </div>
           </div>
 
@@ -325,13 +326,13 @@ const App: React.FC = () => {
               className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'dashboard' ? 'bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 text-cyan-400 border border-white/10 shadow-xl' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
             >
               <LayoutDashboard size={20} />
-              Portfolio Hub
+              Financial Hub
             </button>
             <button 
               onClick={() => setActiveView('portfolio')}
               className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'portfolio' ? 'bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 text-cyan-400 border border-white/10 shadow-xl' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
             >
-              <Briefcase size={20} />
+              <CloudUpload size={20} />
               Portfolio Ledger
             </button>
             <button 
@@ -383,11 +384,15 @@ const App: React.FC = () => {
         <div className="mt-auto p-8 border-t border-white/10 bg-black/30">
           <div className="flex items-center gap-4 mb-8">
             <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center shadow-inner overflow-hidden">
-               <User size={20} className="text-slate-400" />
+               {session?.user?.user_metadata?.avatar_url ? (
+                 <img src={session.user.user_metadata.avatar_url} alt="User" className="w-full h-full object-cover" />
+               ) : (
+                 <User size={20} className="text-slate-400" />
+               )}
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-[10px] font-black text-white uppercase tracking-wider truncate">{session?.user?.email}</p>
-              <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Authenticated</p>
+              <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Active Account</p>
             </div>
           </div>
           <button 
@@ -403,13 +408,10 @@ const App: React.FC = () => {
       <main className="flex-1 overflow-y-auto bg-slate-50 min-h-screen custom-scrollbar flex flex-col">
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200 px-10 py-5 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-5">
-             <div className="md:hidden w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center">
-                <span className="text-white text-sm font-black italic">M9</span>
-             </div>
              <div className="flex flex-col">
-               <h1 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-1">M9 Command Center</h1>
+               <h1 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-1">Command Control</h1>
                <p className="text-lg font-black text-slate-900 uppercase tracking-tight">
-                 {activeView === 'dashboard' ? 'Portfolio Overview' : activeView === 'portfolio' ? 'Portfolio Ledger' : 'Production Ledger Editor'}
+                 {activeView === 'dashboard' ? 'Portfolio Performance' : activeView === 'portfolio' ? 'Strategic Ledger' : 'Production Editor'}
                </p>
              </div>
           </div>
@@ -418,19 +420,18 @@ const App: React.FC = () => {
                 {isSaving ? (
                   <div className="flex items-center gap-3 animate-pulse">
                     <CloudUpload size={14} className="text-amber-500" />
-                    <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Syncing Cloud</span>
+                    <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Saving Cloud</span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-3">
                     <Cloud size={14} className="text-emerald-500" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">All Sync Clear</span>
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Synced Secure</span>
                   </div>
                 )}
              </div>
-             <div className="h-8 w-[1px] bg-slate-200 mx-2 hidden lg:block"></div>
              <Button onClick={handleAddDress} disabled={isSyncing} variant="primary" className="h-11 px-6 text-[10px] uppercase tracking-[0.2em] font-black shadow-xl">
                <Plus size={18} className="mr-2" />
-               Build New Project
+               New Production
              </Button>
           </div>
         </header>
@@ -440,7 +441,7 @@ const App: React.FC = () => {
             <Dashboard dresses={dresses} onEditDress={(id) => { setSelectedDressId(id); setActiveView('manager'); }} />
           )}
           {activeView === 'portfolio' && (
-             <PortfolioHubView />
+            <PortfolioHubView />
           )}
           {activeView === 'manager' && selectedDress && (
             <SelectionManager 
